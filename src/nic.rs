@@ -59,11 +59,16 @@ impl Iterator for Flow {
 
 
 pub struct NIC {
+    // fundamental properties
     latency_ns: u64,
     ns_per_byte: u64,
+
+    // operational management
     enabled: bool,
-    pub count: u64,
     queue: VecDeque<Packet>,
+
+    // stats
+    pub count: u64,
 }
 
 impl NIC {
@@ -101,10 +106,16 @@ impl NIC {
 
         //scheduler.call_in(1500, EventType::NICEnable{nic: 0});
         //scheduler.call_in(1510, EventType::NICRx{nic: 0, packet});
-        event_queue.push(-(time as i64+1500), scheduler::Event{time: time+1500, event_type: scheduler::EventType::NICEnable{nic: 0}});
-        event_queue.push(-(time as i64+1510), scheduler::Event{time: time+1510, event_type: scheduler::EventType::NICRx{nic: 0, packet}});
+        let tx_delay = self.ns_per_byte * packet.size_byte;
+        let rx_delay = self.latency_ns + tx_delay;
+        event_queue.push(- ((time + tx_delay) as i64), scheduler::Event{time: time+1500, event_type: scheduler::EventType::NICEnable{nic: 0}});
+        event_queue.push(-((time +rx_delay) as i64), scheduler::Event{time: time+1510, event_type: scheduler::EventType::NICRx{nic: 0, packet}});
         //let reenable = || {self.send(true)};
         //self.scheduler.call_in(1500, Box::new(reenable));
     }
+}
+
+
+pub struct ToR {
 }
 

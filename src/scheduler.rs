@@ -40,7 +40,7 @@ pub struct Scheduler {
     queue: RadixHeapMap<i64, Event>,
 
     // network elements
-    NICs: Vec<nic::NIC>,
+    nics: Vec<nic::NIC>,
 }
 
 impl Scheduler {
@@ -54,7 +54,7 @@ impl Scheduler {
             //queue : BinaryHeap::new(),
             queue : RadixHeapMap::new(),
 
-            NICs: nics,
+            nics: nics,
         }
     }
 
@@ -74,13 +74,13 @@ impl Scheduler {
             let event = tuple.1;
             self.time = event.time;
 
-            let events = match event.event_type {
-                EventType::NICRx {nic, packet} => self.NICs[nic].enq(self.time, &mut self.queue, packet),
-                EventType::NICEnable {nic} => self.NICs[nic].send(self.time, &mut self.queue, true),
+            match event.event_type {
+                EventType::NICRx {nic, packet} => self.nics[nic].enq(self.time, &mut self.queue, packet),
+                EventType::NICEnable {nic} => self.nics[nic].send(self.time, &mut self.queue, true),
             };
 
 
         }
-        println!("{}", self.NICs[0].count);
+        println!("{}", self.nics[0].count);
     }
 }
