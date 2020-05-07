@@ -7,6 +7,8 @@ pub mod nic;
 pub mod scheduler;
 
 fn main() {
+    println!("Setup...");
+
     let mut s = scheduler::Scheduler::new();
 
     let f = nic::Flow::new();
@@ -16,6 +18,7 @@ fn main() {
     s.call_in(0, scheduler::EventType::NICEnable{nic: 0});
 
 
+    println!("Run...");
     s.run();
 
     println!("done");

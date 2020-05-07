@@ -2,21 +2,25 @@ use std::collections::VecDeque;
 use radix_heap::RadixHeapMap;
 use crate::scheduler;
 
+pub type SizeByte = u64;
+
+#[derive(Debug)]
 pub struct Packet {
-    src: u32,
-    dst: u32,
+    src: ServerID,
+    dst: ServerID,
     seq_num: u64,
-    size_byte: u64,
+    size_byte: SizeByte,
 
     ttl: u32,
-    sent_ns: u64,
+    sent_ns: i64,
 }
 
+#[derive(Debug)]
 pub struct Flow {
-    src: u32,
-    dst: u32,
+    src: ServerID,
+    dst: ServerID,
 
-    size_byte: u64,
+    size_byte: SizeByte,
     cwnd: u32,
     next_seq: u64,
 }
@@ -57,11 +61,15 @@ impl Iterator for Flow {
     }
 }
 
+pub trait Receiver {
+    fn receive(&mut self, time: i64, event_queue: &mut RadixHeapMap<i64, scheduler::Event>, packet: Packet);
+}
 
+#[derive(Debug)]
 pub struct NIC {
     // fundamental properties
-    latency_ns: u64,
-    ns_per_byte: u64,
+    latency_ns: i64,
+    ns_per_byte: i64,
 
     // operational management
     enabled: bool,
@@ -82,7 +90,27 @@ impl NIC {
         }
     }
 
-    pub fn enq(&mut self, time: u64, event_queue: &mut RadixHeapMap<i64, scheduler::Event>, p: Packet) {
+
+    pub fn send(&mut self, time: i64, event_queue: &mut RadixHeapMap<i64, scheduler::Event>, enable: bool) {
+        self.enabled = self.enabled | enable;
+
+        if !self.enabled || self.queue.len() == 0 {
+            return
+        }
+
+        let packet = self.queue.pop_front().unwrap();
+        self.enabled = false;
+
+        let tx_delay = self.ns_per_byte * packet.size_byte as i64;
+        let rx_delay = self.latency_ns + tx_delay;
+
+        event_queue.push(-(time + tx_delay), scheduler::Event{time: time+tx_delay, event_type: scheduler::EventType::NICEnable{nic: 0}});
+        event_queue.push(-(time + rx_delay), scheduler::Event{time: time+rx_delay, event_type: scheduler::EventType::NICRx{nic: 0, packet}});
+    }
+}
+
+impl Receiver for NIC {
+    fn receive(&mut self, time: i64, event_queue: &mut RadixHeapMap<i64, scheduler::Event>, p: Packet) {
         //println!("Received packet #{}!", p.seq_num);
 
         self.queue.push_back(p);
@@ -91,31 +119,57 @@ impl NIC {
         // attempt send
         self.send(time, event_queue, false);
     }
+}
 
-    pub fn send(&mut self, time: u64, event_queue: &mut RadixHeapMap<i64, scheduler::Event>, enable: bool) {
-        self.enabled = self.enabled | enable;
+type ServerID = usize;
+#[derive(Debug)]
+pub struct Server {
+    server_id: ServerID
+}
 
-        if !self.enabled || self.queue.len() == 0 {
-            return
-        }
-
-        let packet = self.queue.pop_front().unwrap();
-        //println!("Sending packet #{}", packet.seq_num);
-        self.enabled = false;
-
-
-        //scheduler.call_in(1500, EventType::NICEnable{nic: 0});
-        //scheduler.call_in(1510, EventType::NICRx{nic: 0, packet});
-        let tx_delay = self.ns_per_byte * packet.size_byte;
-        let rx_delay = self.latency_ns + tx_delay;
-        event_queue.push(- ((time + tx_delay) as i64), scheduler::Event{time: time+1500, event_type: scheduler::EventType::NICEnable{nic: 0}});
-        event_queue.push(-((time +rx_delay) as i64), scheduler::Event{time: time+1510, event_type: scheduler::EventType::NICRx{nic: 0, packet}});
-        //let reenable = || {self.send(true)};
-        //self.scheduler.call_in(1500, Box::new(reenable));
+impl Server {
+    pub fn new(server_id: ServerID) -> Server {
+        Server { server_id }
     }
 }
 
-
+type ToRID = usize;
+#[derive(Debug)]
 pub struct ToR {
+    // about me
+    tor_id: ToRID,
+
+    servers: Vec<Server>,
+
+    output_queues: Vec<NIC>,
+}
+
+impl ToR {
+    pub fn new(tor_id : ToRID, n_servers: usize) -> ToR {
+        let mut servers : Vec<Server> = Vec::new();
+        let mut output_queues : Vec<NIC> = Vec::new();
+
+        // TODO make this work when >1 ToR
+        for server_id in 0..n_servers {
+            servers.push(Server::new(server_id));
+            output_queues.push(NIC::new());
+        }
+
+        ToR {
+            tor_id,
+            servers,
+            output_queues,
+        }
+    }
+}
+
+impl Receiver for ToR {
+    fn receive(&mut self, time: i64, event_queue: &mut RadixHeapMap<i64, scheduler::Event>, packet: Packet) {
+        let dst = packet.dst as usize;
+
+        // TODO support inter-ToR traffic
+        // put in the corresponding output queue
+        self.output_queues[dst].receive(time, event_queue, packet);
+    }
 }
 
