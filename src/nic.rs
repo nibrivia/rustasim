@@ -138,27 +138,16 @@ type ToRID = usize;
 pub struct ToR {
     // about me
     tor_id: ToRID,
-
-    servers: Vec<Server>,
-
+    n_ports: usize,
     output_queues: Vec<NIC>,
 }
 
 impl ToR {
-    pub fn new(tor_id : ToRID, n_servers: usize) -> ToR {
-        let mut servers : Vec<Server> = Vec::new();
-        let mut output_queues : Vec<NIC> = Vec::new();
-
-        // TODO make this work when >1 ToR
-        for server_id in 0..n_servers {
-            servers.push(Server::new(server_id));
-            output_queues.push(NIC::new());
-        }
-
+    pub fn new(tor_id : ToRID, n_ports: usize) -> ToR {
         ToR {
             tor_id,
-            servers,
-            output_queues,
+            n_ports,
+            output_queues: Vec::new(),
         }
     }
 }
