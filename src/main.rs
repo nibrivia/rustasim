@@ -9,17 +9,18 @@ pub mod scheduler;
 fn main() {
     println!("Setup...");
 
-    let mut s = scheduler::Scheduler::new();
+    /*let mut n = scheduler::Network::new();
 
     let f = nic::Flow::new();
     for packet in f {
-        s.call_in(0, scheduler::EventType::NICRx{nic: 0, packet});
+        n.call_in(0, scheduler::EventType::NICRx{nic: 0, packet});
     }
-    s.call_in(0, scheduler::EventType::NICEnable{nic: 0});
+    n.call_in(0, scheduler::EventType::NICEnable{nic: 0});
+    */
 
 
     println!("Run...");
-    s.run();
+    //n.run();
 
     println!("done");
 }

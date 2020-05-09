@@ -1,3 +1,4 @@
+/*
 use radix_heap::RadixHeapMap;
 use std::cmp::Ordering;
 use crate::nic;
@@ -38,7 +39,7 @@ impl Eq for Event {} // don't use function
 
 
 #[derive(Debug)]
-pub struct Scheduler {
+pub struct Network {
     time: i64,
     limit: i64,
     //queue: BinaryHeap<Event>,
@@ -48,12 +49,12 @@ pub struct Scheduler {
     nics: Vec<nic::NIC>,
 }
 
-impl Scheduler {
-    pub fn new() -> Scheduler {
+impl Network {
+    pub fn new() -> Network {
         let mut nics = Vec::new();
         nics.push(nic::NIC::new());
 
-        Scheduler {
+        Network {
             time : 0,
             limit: 1_000_000_000,
             //queue : BinaryHeap::new(),
@@ -89,3 +90,4 @@ impl Scheduler {
         println!("{}", self.nics[0].count);
     }
 }
+*/
