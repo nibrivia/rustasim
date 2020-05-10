@@ -1,7 +1,9 @@
+use std::thread;
 use std::collections::VecDeque;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::BinaryHeap;
+use ringbuf::RingBuffer;
+// use std::collections::BinaryHeap; TODO might be better than RadixHeapMap?
 use radix_heap::RadixHeapMap;
 use std::sync::mpsc;
 // use crate::scheduler;
@@ -83,15 +85,16 @@ pub struct Event {
     //function: Box<dyn FnOnce() -> ()>,
 }
 
-#[derive(Debug)]
 struct EventReceiver {
     id : usize,
+    threads : Vec<thread::JoinHandle<()>>,
 
     // outgoing events
     next_heap : RadixHeapMap<i64, Event>, // contains <=one event from each src
     missing_srcs : HashSet<usize>, // which srcs are missing
 
-    event_queues: HashMap<usize, VecDeque<Event>>, // split
+    event_q_out : HashMap<usize, ringbuf::Consumer<Event>>, // TODO split
+    event_q_inc : HashMap<usize, ringbuf::Producer<Event>>, // TODO split
 
     // incoming events
     event_rx: mpsc::Receiver<Event>,
@@ -106,11 +109,13 @@ impl EventReceiver {
 
         EventReceiver {
             id,
+            threads : Vec::new(),
 
             next_heap : RadixHeapMap::new(),
             missing_srcs : HashSet::new(),
 
-            event_queues : HashMap::new(),
+            event_q_out : HashMap::new(),
+            event_q_inc : HashMap::new(),
 
             event_rx,
             event_tx,
@@ -123,63 +128,88 @@ impl EventReceiver {
         // TODO if time > 0, panic
 
         // create event queue
-        self.event_queues.insert(other_id, VecDeque::new());
+        let q = RingBuffer::<Event>::new(10); // TODO look into effect of size on this...
+        let (mut q_inc, mut q_out) = q.split();
+
+        self.event_q_out.insert(other_id, q_out);
+        self.event_q_inc.insert(other_id, q_inc);
+        self.last_times.insert(other_id, 0); // initialize safe time to 0
 
         // let them know how to add events
         return self.event_tx.clone();
     }
 
-    pub fn recv_loop(&mut self) {
+    pub fn start(&mut self) -> thread::JoinHandle<()> {
+        let handle = thread::spawn(move ||  {
+            // mutates:
+            //    - event_queues on the rx end
+            //    - last_times
+            //    - safe_time
+            loop {
+                // read in event from channel
+                let event = self.event_rx.recv().unwrap();
+                let event_time = event.time as u64;
+                let event_src  = event.src;
+
+                // enq in appropriate event queue
+                self.event_q_inc.get_mut(&event.src).unwrap().push(event);
+
+                // update safe proc time, needs to happen after append
+                let old_safe_time = self.last_times[&event_src];
+                self.last_times.insert(event_src, event_time);
+
+                // remove and if need be, add to heap
+                if old_safe_time == self.safe_time { // might need updating of safe_time
+                    let (_, safe_time) = self.last_times.iter().min().unwrap(); // TODO check this gets min(value)
+                    self.safe_time = *safe_time;
+
+                    // TODO notify the sending loop
+                    // safe_channel.send(safe_time)
+                }
+            }
+        });
+
+
+        return handle;
+    }
+
+    // TODO make into iterator?
+    fn send_loop(&mut self) {
+        // mutates:
+        //    - event_queues on the tx end
+        //    - next_heap
+        //    - missing_srcs
+
         loop {
-            // read in event from channel
-            let event = self.event_rx.recv().unwrap();
-            let event_time = event.time as u64;
-            let event_src  = event.src;
+            // TODO receive from channel
+            let safe_time = 1;
 
-            // enq in appropriate event queue
-            self.event_queues.get_mut(&event.src).unwrap().push_back(event);
-
-
-            // update safe proc time, needs to happen after append
-            let old_safe_time = self.last_times[&event_src];
-            self.last_times.insert(event_src, event_time);
-
-            // remove and if need be, add to heap
-            if old_safe_time == self.safe_time { // might need updating of safe_time
-                let (_, safe_time) = self.last_times.iter().min().unwrap();
-                self.safe_time = *safe_time;
-
-                // TODO notify the sending loop
+            // refill our heap with the missing sources
+            for src in &self.missing_srcs {
+                match self.event_q_out.get_mut(&src).unwrap().pop() {
+                    None => continue,
+                    Some(event) => self.next_heap.push(-event.time, event)
+                }
             }
 
-        }
-    }
-
-    // TODO make iterator?
-    pub fn send_loop(&mut self) {
-        loop {
-            // wait on condition variable? ...
-
-            // current safe time?
-            // keep waiting if we got no-one... TODO might not be needed?
-            if self.last_times.len() == 0 { continue } 
-
-            let safe_time = self.last_times.iter().min().unwrap();
             // process events up till <= safe time
+            while self.next_heap.peek_key().unwrap() <= safe_time {
+                let (_, event) = self.next_heap.pop().unwrap();
 
+                // TODO
+                // if not empty_event:
+                //     yield event
 
-
-            // send new events
-            // self.event_rx.send().unwrap();
-
-            // if no events, wait until "wakeup"
+                // update heap
+                match self.event_q_out.get_mut(&event.src).unwrap().pop() {
+                    None => { self.missing_srcs.insert(event.src); break },
+                    Some(event) => self.next_heap.push(-event.time, event)
+                }
+            }
         }
     }
-
-    // iter()
 }
 
-#[derive(Debug)]
 pub struct NIC {
     // fundamental properties
     latency_ns: i64,
@@ -208,27 +238,6 @@ impl NIC {
     pub fn start(&self) {
         // TODO start sending, receiving threads
     }
-
-
-
-    /*
-    pub fn send(&mut self, time: i64, event_queue: &mut RadixHeapMap<i64, scheduler::Event>, enable: bool) {
-        self.enabled = self.enabled | enable;
-
-        if !self.enabled || self.queue.len() == 0 {
-            return
-        }
-
-        let packet = self.queue.pop_front().unwrap();
-        self.enabled = false;
-
-        let tx_delay = self.ns_per_byte * packet.size_byte as i64;
-        let rx_delay = self.latency_ns + tx_delay;
-
-        event_queue.push(-(time + tx_delay), scheduler::Event{time: time+tx_delay, event_type: scheduler::EventType::NICEnable{nic: 0}});
-        event_queue.push(-(time + rx_delay), scheduler::Event{time: time+rx_delay, event_type: scheduler::EventType::NICRx{nic: 0, packet}});
-    }
-    */
 }
 
 /*

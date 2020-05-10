@@ -61,10 +61,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ringbuf"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c2b29d87cfbdce39849012bb5020fff88b8f01f4f5b55846a0b6ef360774eae"
+
+[[package]]
 name = "rustasim"
 version = "0.1.0"
 dependencies = [
  "radix-heap",
+ "ringbuf",
 ]
 
 [[package]]

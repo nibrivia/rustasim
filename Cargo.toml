@@ -10,3 +10,4 @@ repository = "https://github.com/nibrivia/rustasim"
 
 [dependencies]
 radix-heap = "0.3.8"
+ringbuf = "0.2.1"
