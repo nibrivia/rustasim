@@ -1,5 +1,5 @@
 use std::thread;
-use std::collections::VecDeque;
+//use std::collections::VecDeque;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use ringbuf::RingBuffer;
@@ -73,8 +73,9 @@ pub trait Receiver {
 
 #[derive(Debug)]
 pub enum EventType {
-    NICRx {nic: usize, packet: Packet},
-    NICEnable { nic: usize },
+    Packet (usize, Packet),
+    Empty,
+    //NICEnable { nic: usize },
 }
 
 #[derive(Debug)]
@@ -87,20 +88,18 @@ pub struct Event {
 
 struct EventReceiver {
     id : usize,
-    threads : Vec<thread::JoinHandle<()>>,
 
     // outgoing events
     next_heap : RadixHeapMap<i64, Event>, // contains <=one event from each src
     missing_srcs : HashSet<usize>, // which srcs are missing
 
-    event_q_out : HashMap<usize, ringbuf::Consumer<Event>>, // TODO split
-    event_q_inc : HashMap<usize, ringbuf::Producer<Event>>, // TODO split
+    event_q_out : HashMap<usize, ringbuf::Consumer<Event>>,
+    event_q_inc : HashMap<usize, ringbuf::Producer<Event>>,
 
     // incoming events
     event_rx: mpsc::Receiver<Event>,
     event_tx: mpsc::Sender<Event>,
     last_times : HashMap<usize, u64>, // last event from each queue
-    safe_time: u64, // current safe time, for optimizing
 }
 
 impl EventReceiver {
@@ -109,7 +108,6 @@ impl EventReceiver {
 
         EventReceiver {
             id,
-            threads : Vec::new(),
 
             next_heap : RadixHeapMap::new(),
             missing_srcs : HashSet::new(),
@@ -120,16 +118,13 @@ impl EventReceiver {
             event_rx,
             event_tx,
             last_times : HashMap::new(),
-            safe_time : 0,
         }
     }
 
-    pub fn connect(&mut self, other_id : usize) -> mpsc::Sender<Event> {
-        // TODO if time > 0, panic
-
+    pub fn connect_incoming(&mut self, other_id : usize) -> mpsc::Sender<Event> {
         // create event queue
         let q = RingBuffer::<Event>::new(10); // TODO look into effect of size on this...
-        let (mut q_inc, mut q_out) = q.split();
+        let (mut q_inc, mut q_out) = q.split(); // TODO remove mut?
 
         self.event_q_out.insert(other_id, q_out);
         self.event_q_inc.insert(other_id, q_inc);
@@ -139,160 +134,161 @@ impl EventReceiver {
         return self.event_tx.clone();
     }
 
-    pub fn start(&mut self) -> thread::JoinHandle<()> {
-        let handle = thread::spawn(move ||  {
+    pub fn start(self) -> mpsc::Receiver<Event> {
+        let mut event_q_inc = self.event_q_inc;
+        let mut last_times  = self.last_times;
+        let mut event_rx    = self.event_rx;
+
+        let (safe_prod, safe_cons) = mpsc::channel();
+
+        thread::spawn(move ||  {
             // mutates:
             //    - event_queues on the rx end
             //    - last_times
             //    - safe_time
+            let safe_time : u64 = 0;
             loop {
                 // read in event from channel
-                let event = self.event_rx.recv().unwrap();
+                let event = event_rx.recv().unwrap();
                 let event_time = event.time as u64;
                 let event_src  = event.src;
 
                 // enq in appropriate event queue
-                self.event_q_inc.get_mut(&event.src).unwrap().push(event);
+                event_q_inc.get_mut(&event.src).unwrap().push(event).unwrap();
 
                 // update safe proc time, needs to happen after append
-                let old_safe_time = self.last_times[&event_src];
-                self.last_times.insert(event_src, event_time);
+                let old_safe_time = last_times[&event_src];
+                last_times.insert(event_src, event_time).unwrap();
 
                 // remove and if need be, add to heap
-                if old_safe_time == self.safe_time { // might need updating of safe_time
-                    let (_, safe_time) = self.last_times.iter().min().unwrap(); // TODO check this gets min(value)
-                    self.safe_time = *safe_time;
+                if old_safe_time == safe_time { // might need updating of safe_time
+                    let (_, safe_time) = last_times.iter().min().unwrap(); // TODO check this gets min(value)
+                    // safe_time = *safe_time;
 
-                    // TODO notify the sending loop
-                    // safe_channel.send(safe_time)
+                    safe_prod.send(*safe_time).unwrap();
                 }
             }
         });
 
 
-        return handle;
-    }
+        let mut event_q_out = self.event_q_out;
+        let mut next_heap = self.next_heap;
+        let mut missing_srcs = self.missing_srcs;
 
-    // TODO make into iterator?
-    fn send_loop(&mut self) {
-        // mutates:
-        //    - event_queues on the tx end
-        //    - next_heap
-        //    - missing_srcs
+        let (event_prod, event_cons) = mpsc::channel();
 
-        loop {
-            // TODO receive from channel
-            let safe_time = 1;
+        thread::spawn(move ||  {
+            // mutates:
+            //    - event_queues on the tx end
+            //    - next_heap
+            //    - missing_srcs
 
-            // refill our heap with the missing sources
-            for src in &self.missing_srcs {
-                match self.event_q_out.get_mut(&src).unwrap().pop() {
-                    None => continue,
-                    Some(event) => self.next_heap.push(-event.time, event)
+            loop {
+                // Receive time from channel
+                let safe_time : u64 = safe_cons.recv().unwrap();
+
+                // refill our heap with the missing sources
+                for src in &missing_srcs {
+                    match event_q_out.get_mut(&src).unwrap().pop() {
+                        None => continue,
+                        Some(event) => next_heap.push(-event.time, event)
+                    }
+                }
+
+                // process events up till <= safe time
+                while -(next_heap.peek_key().unwrap()) <= safe_time as i64 {
+                    let (_, event) = next_heap.pop().unwrap();
+                    let src = event.src;
+
+                    // if not empty_event:
+                    //     yield event
+                    event_prod.send(event).unwrap();
+
+                    // update heap
+                    match event_q_out.get_mut(&src).unwrap().pop() {
+                        None => { missing_srcs.insert(src); break },
+                        Some(new_event) => next_heap.push(-new_event.time, new_event)
+                    }
                 }
             }
+        });
 
-            // process events up till <= safe time
-            while self.next_heap.peek_key().unwrap() <= safe_time {
-                let (_, event) = self.next_heap.pop().unwrap();
-
-                // TODO
-                // if not empty_event:
-                //     yield event
-
-                // update heap
-                match self.event_q_out.get_mut(&event.src).unwrap().pop() {
-                    None => { self.missing_srcs.insert(event.src); break },
-                    Some(event) => self.next_heap.push(-event.time, event)
-                }
-            }
-        }
+        return event_cons;
     }
 }
 
-pub struct NIC {
-    // fundamental properties
-    latency_ns: i64,
-    ns_per_byte: i64,
+pub struct Router {
+    id : usize,
 
+    // fundamental properties
+    latency_ns: u64,
+    ns_per_byte: u64,
+
+    // event management
     event_receiver : EventReceiver,
-    id : u64,
+    out_queues : HashMap<usize, mpsc::Sender<Event>>,
+
+    // networking things
+    route : HashMap<usize, usize>,
 
     // stats
     pub count: u64,
 }
 
-impl NIC {
-    pub fn new(id : u64, dst : u64) -> NIC {
+impl Router {
+    pub fn new(id : usize) -> Router {
 
-        NIC {
+        Router {
+            id,
             latency_ns: 10,
             ns_per_byte: 1,
+
             event_receiver : EventReceiver::new(id as usize),
+            out_queues : HashMap::new(),
+
+            route : HashMap::new(),
+
             count : 0,
-            id,
         }
     }
 
-
-    pub fn start(&self) {
-        // TODO start sending, receiving threads
+    pub fn connect_incoming(&mut self, other_id: usize) -> mpsc::Sender<Event> {
+        return self.event_receiver.connect_incoming(other_id);
     }
-}
 
-/*
-impl Receiver for NIC {
-    fn receive(&mut self, time: i64, event_queue: &mut RadixHeapMap<i64, scheduler::Event>, p: Packet) {
-        //println!("Received packet #{}!", p.seq_num);
-
-        self.queue.push_back(p);
-        self.count += 1;
-
-        // attempt send
-        self.send(time, event_queue, false);
+    pub fn connect_outgoing(&mut self, other_id : usize, tx_queue : mpsc::Sender<Event>) {
+        self.out_queues.insert(other_id, tx_queue);
     }
-}
-*/
 
-/*
-type ServerID = usize;
-#[derive(Debug)]
-pub struct Server {
-    server_id: ServerID
-}
+    // will never return
+    pub fn start(self) {
+        let event_channel = self.event_receiver.start();
 
-impl Server {
-    pub fn new(server_id: ServerID) -> Server {
-        Server { server_id }
-    }
-}
+        loop {
+            let event : Event = event_channel.recv().unwrap();
+            match event.event_type {
+                EventType::Empty => {}, // do nothing
+                EventType::Packet(src, mut packet) => {
+                    println!("Received {:?} from {}", packet, src);
+                    if packet.dst == self.id {
+                        // bounce!
+                        packet.dst = packet.src;
+                        packet.src = self.id;
+                    }
 
-type ToRID = usize;
-#[derive(Debug)]
-pub struct ToR {
-    // about me
-    tor_id: ToRID,
-    n_ports: usize,
-    output_queues: Vec<NIC>,
-}
+                    let next_hop = self.route[&packet.dst];
 
-impl ToR {
-    pub fn new(tor_id : ToRID, n_ports: usize) -> ToR {
-        ToR {
-            tor_id,
-            n_ports,
-            output_queues: Vec::new(),
-        }
-    }
-}
-
-impl Receiver for ToR {
-    fn receive(&mut self, time: i64, event_queue: &mut RadixHeapMap<i64, scheduler::Event>, packet: Packet) {
-        let dst = packet.dst as usize;
-
-        // TODO support inter-ToR traffic
-        // put in the corresponding output queue
-        self.output_queues[dst].receive(time, event_queue, packet);
-    }
-}
-*/
+                    let rx_delay = self.latency_ns + self.ns_per_byte * packet.size_byte;
+                    self.out_queues[&next_hop]
+                        .send(Event{
+                            event_type : EventType::Packet(src, packet),
+                            src: self.id,
+                            time: event.time + rx_delay as i64,
+                        })
+                        .unwrap();
+                } // boing...
+            } // boing...
+        } // boing...
+    } // boing...
+} // boing...
+// splat
