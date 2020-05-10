@@ -1,26 +1,40 @@
-//use std::collections::BinaryHeap;
-//use std::cmp::Ordering;
-//use radix_heap::RadixHeapMap;
-//use std::collections::VecDeque;
+use std::thread;
 
 pub mod nic;
-pub mod scheduler;
 
 fn main() {
     println!("Setup...");
 
-    /*let mut n = scheduler::Network::new();
+    // Create entities
+    let mut src = nic::Router::new(0);
+    let mut dst = nic::Router::new(2);
 
-    let f = nic::Flow::new();
+    let mut switch = nic::Router::new(1);
+
+    // Connect them up!
+    let hack = src.connect(&mut switch);
+    switch.connect(&mut dst);
+
+    // cheat the start of the flow
+    let f = nic::Flow::new(0, 2, 200);
     for packet in f {
-        n.call_in(0, scheduler::EventType::NICRx{nic: 0, packet});
+        hack.send(nic::Event {
+                src : 1,
+                time : 0,
+                event_type : nic::EventType::Packet(1, packet),
+            })
+            .unwrap();
     }
-    n.call_in(0, scheduler::EventType::NICEnable{nic: 0});
-    */
 
 
     println!("Run...");
-    //n.run();
+    let handle_src = thread::spawn(move || src.start());
+    let handle_dst = thread::spawn(move || dst.start());
+    let handle_switch = thread::spawn(move || switch.start());
+
+    handle_src.join().unwrap();
+    handle_dst.join().unwrap();
+    handle_switch.join().unwrap();
 
     println!("done");
 }

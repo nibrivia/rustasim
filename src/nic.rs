@@ -9,6 +9,9 @@ use std::sync::mpsc;
 // use crate::scheduler;
 
 // pub type SizeByte = u64;
+//
+const PRINT :i64 = 100_000_000;
+const DONE  :i64 = PRINT + 100_000;
 
 #[derive(Debug)]
 pub struct Packet {
@@ -34,12 +37,12 @@ pub struct Flow {
 const BYTES_PER_PACKET: u64 = 1500;
 
 impl Flow {
-    pub fn new() -> Flow {
+    pub fn new(src : usize, dst : usize, n_packets : u64) -> Flow {
         Flow {
-            src: 0,
-            dst: 0,
+            src,
+            dst,
 
-            size_byte: 200*BYTES_PER_PACKET,
+            size_byte: n_packets*BYTES_PER_PACKET,
             cwnd: 1,
             next_seq: 0,
         }
@@ -75,6 +78,7 @@ pub trait Receiver {
 pub enum EventType {
     Packet (usize, Packet),
     Empty,
+    //Close,
     //NICEnable { nic: usize },
 }
 
@@ -123,12 +127,14 @@ impl EventReceiver {
 
     pub fn connect_incoming(&mut self, other_id : usize) -> mpsc::Sender<Event> {
         // create event queue
-        let q = RingBuffer::<Event>::new(10); // TODO look into effect of size on this...
-        let (mut q_inc, mut q_out) = q.split(); // TODO remove mut?
+        let q = RingBuffer::<Event>::new(25600); // TODO look into effect of size on this...
+        let (q_inc, q_out) = q.split(); // TODO remove mut?
 
         self.event_q_out.insert(other_id, q_out);
         self.event_q_inc.insert(other_id, q_inc);
         self.last_times.insert(other_id, 0); // initialize safe time to 0
+
+        self.missing_srcs.insert(other_id);
 
         // let them know how to add events
         return self.event_tx.clone();
@@ -137,7 +143,8 @@ impl EventReceiver {
     pub fn start(self) -> mpsc::Receiver<Event> {
         let mut event_q_inc = self.event_q_inc;
         let mut last_times  = self.last_times;
-        let mut event_rx    = self.event_rx;
+        let     event_rx    = self.event_rx;
+        let id = self.id;
 
         let (safe_prod, safe_cons) = mpsc::channel();
 
@@ -146,15 +153,23 @@ impl EventReceiver {
             //    - event_queues on the rx end
             //    - last_times
             //    - safe_time
-            let safe_time : u64 = 0;
+            let mut safe_time : u64 = 0;
+            safe_prod.send(0).unwrap();
             loop {
                 // read in event from channel
-                let event = event_rx.recv().unwrap();
+                //println!("R{} waiting for events...", id);
+                let event = event_rx.recv();
+                let event = match event {
+                    Ok(event) => event,
+                    Err(error) => panic!("R{} received event error <{:?}>", id, error),
+                };
+                //println!("R{} received event {:?}", id, event);
                 let event_time = event.time as u64;
                 let event_src  = event.src;
 
                 // enq in appropriate event queue
                 event_q_inc.get_mut(&event.src).unwrap().push(event).unwrap();
+                //println!("R{} received event ok", id);
 
                 // update safe proc time, needs to happen after append
                 let old_safe_time = last_times[&event_src];
@@ -162,11 +177,15 @@ impl EventReceiver {
 
                 // remove and if need be, add to heap
                 if old_safe_time == safe_time { // might need updating of safe_time
-                    let (_, safe_time) = last_times.iter().min().unwrap(); // TODO check this gets min(value)
-                    // safe_time = *safe_time;
-
-                    safe_prod.send(*safe_time).unwrap();
+                    safe_time = *last_times.values().min().unwrap(); // TODO check this gets min(value)
                 }
+
+                match safe_prod.send(safe_time) {
+                    Ok(_) => (),
+                    Err(error) => panic!("R{} send safetime error <{:?}>", id, error),
+                };
+
+                if safe_time > DONE as u64 { return; }
             }
         });
 
@@ -174,6 +193,7 @@ impl EventReceiver {
         let mut event_q_out = self.event_q_out;
         let mut next_heap = self.next_heap;
         let mut missing_srcs = self.missing_srcs;
+        let id = self.id;
 
         let (event_prod, event_cons) = mpsc::channel();
 
@@ -185,14 +205,34 @@ impl EventReceiver {
 
             loop {
                 // Receive time from channel
-                let safe_time : u64 = safe_cons.recv().unwrap();
+                //println!("S{} waiting for safe time...", id);
+                let safe_time = safe_cons.recv();
+                let safe_time = match safe_time {
+                    Ok(event) => event,
+                    Err(error) => panic!("S{} received error {:?}", id, error),
+                };
+                //println!("S{} received safe_time of {}", id, safe_time);
 
                 // refill our heap with the missing sources
-                for src in &missing_srcs {
+                let mut new_missing : HashSet<usize> = HashSet::new();
+                for src in (&mut missing_srcs).iter() {
                     match event_q_out.get_mut(&src).unwrap().pop() {
-                        None => continue,
-                        Some(event) => next_heap.push(-event.time, event)
+                        None => { new_missing.insert(*src); () },
+                        Some(event) => next_heap.push(-event.time, event),
                     }
+                }
+
+                missing_srcs = new_missing;
+
+                /*
+                for src in added_srcs.iter() {
+                    missing_srcs.remove(&src);
+                }
+                */
+
+                if missing_srcs.len() > 0 {
+                    //println!("S{} missing sources...", id);
+                    continue // keep waiting
                 }
 
                 // process events up till <= safe time
@@ -202,7 +242,11 @@ impl EventReceiver {
 
                     // if not empty_event:
                     //     yield event
-                    event_prod.send(event).unwrap();
+                    //println!("S{} sending event {:?}...", id, event);
+                    match event_prod.send(event) {
+                        Ok(_) => (),
+                        Err(error) => panic!("S{} send event error {:?}", id, error),
+                    };
 
                     // update heap
                     match event_q_out.get_mut(&src).unwrap().pop() {
@@ -210,6 +254,8 @@ impl EventReceiver {
                         Some(new_event) => next_heap.push(-new_event.time, new_event)
                     }
                 }
+
+                if safe_time > DONE as u64 { return; }
             }
         });
 
@@ -221,12 +267,14 @@ pub struct Router {
     id : usize,
 
     // fundamental properties
-    latency_ns: u64,
-    ns_per_byte: u64,
+    latency_ns: i64,
+    ns_per_byte: i64,
 
     // event management
     event_receiver : EventReceiver,
     out_queues : HashMap<usize, mpsc::Sender<Event>>,
+    out_times  : HashMap<usize, i64>,
+    out_notify : HashMap<usize, i64>,
 
     // networking things
     route : HashMap<usize, usize>,
@@ -240,11 +288,13 @@ impl Router {
 
         Router {
             id,
-            latency_ns: 10,
+            latency_ns: 100,
             ns_per_byte: 1,
 
-            event_receiver : EventReceiver::new(id as usize),
+            event_receiver : EventReceiver::new(id),
             out_queues : HashMap::new(),
+            out_times  : HashMap::new(),
+            out_notify : HashMap::new(),
 
             route : HashMap::new(),
 
@@ -252,38 +302,117 @@ impl Router {
         }
     }
 
+    pub fn connect(&mut self, other : & mut Self) -> mpsc::Sender<Event> {
+        let inc_channel = self.event_receiver.connect_incoming(other.id);
+        let ret_channel = inc_channel.clone();
+
+        let tx_queue = other._connect(&self, inc_channel);
+        self.out_queues.insert(other.id, tx_queue);
+        self.out_times.insert(other.id, 0);
+        self.out_notify.insert(other.id, 0);
+
+        self.route.insert(other.id, other.id); // route to neighbour is neighbour
+
+        return ret_channel; // TODO hacky...
+    }
+
+    pub fn _connect(&mut self, other : &Self, tx_queue : mpsc::Sender<Event>) -> mpsc::Sender<Event> {
+        self.out_queues.insert(other.id, tx_queue);
+        self.out_times.insert(other.id, 0);
+        self.out_notify.insert(other.id, 0);
+
+        self.route.insert(other.id, other.id); // route to neighbour is neighbour
+
+        return self.event_receiver.connect_incoming(other.id);
+    }
+
+    /*
     pub fn connect_incoming(&mut self, other_id: usize) -> mpsc::Sender<Event> {
-        return self.event_receiver.connect_incoming(other_id);
     }
 
     pub fn connect_outgoing(&mut self, other_id : usize, tx_queue : mpsc::Sender<Event>) {
-        self.out_queues.insert(other_id, tx_queue);
     }
+    */
 
     // will never return
-    pub fn start(self) {
+    pub fn start(mut self) {
         let event_channel = self.event_receiver.start();
 
+        // kickstart stuff up
+        if self.id != 1 {
+            for (dst, out_q) in &self.out_queues {
+                out_q.send(Event{
+                    event_type: EventType::Empty,
+                    src: self.id,
+                    time: self.latency_ns,
+                }).unwrap();
+                self.out_times.insert(*dst, self.latency_ns);
+            }
+        }
+
+        if self.id == 0 {
+            self.route.insert(2, 1);
+        }
+        if self.id == 2 {
+            self.route.insert(0, 1);
+        }
+
+        let mut print = true;
         loop {
-            let event : Event = event_channel.recv().unwrap();
+            //println!("Router {} waiting...", self.id);
+            let event = event_channel.recv();
+            let event = match event {
+                Ok(event) => event,
+                Err(error) => panic!("Router {} received error {:?}", self.id, error),
+            };
+            //println!("Router {} \x1b[0;3{}m got event {:?}!...\x1b[0;00m", self.id, self.id+2, event);
+            if event.time > PRINT && print {
+                println!("{}", self.count);
+                print = false;
+            }
+            if event.time > DONE {
+                return;
+            }
             match event.event_type {
-                EventType::Empty => {}, // do nothing
+                EventType::Empty => {
+                    let dst = event.src;
+                    let cur_time = std::cmp::max(event.time, self.out_times[&dst]);
+                    self.out_times.insert(dst, cur_time);
+                    if cur_time+self.latency_ns < self.out_notify[&dst] {
+                        continue
+                    }
+                    self.out_notify.insert(dst, cur_time+self.latency_ns);
+                    self.out_queues[&dst].send(Event{
+                        event_type: EventType::Empty,
+                        src: self.id,
+                        time: cur_time + self.latency_ns,
+                    }).unwrap();
+                }, // do nothing
                 EventType::Packet(src, mut packet) => {
-                    println!("Received {:?} from {}", packet, src);
+                    //println!("@{} Router {} received {:?} from {}", event.time, self.id, packet, src);
+                    self.count += 1;
                     if packet.dst == self.id {
                         // bounce!
                         packet.dst = packet.src;
                         packet.src = self.id;
+                        //continue
                     }
 
                     let next_hop = self.route[&packet.dst];
 
-                    let rx_delay = self.latency_ns + self.ns_per_byte * packet.size_byte;
+                    // sender
+                    let cur_time = std::cmp::max(event.time, self.out_times[&next_hop]);
+                    let tx_end = cur_time + self.ns_per_byte * packet.size_byte as i64;
+                    self.out_times.insert(next_hop, tx_end);
+
+                    // receiver
+                    let rx_end = tx_end + self.latency_ns;
+                    //println!("@{} Router {} sent {:?} to {}", event.time, self.id, packet, next_hop);
                     self.out_queues[&next_hop]
                         .send(Event{
                             event_type : EventType::Packet(src, packet),
                             src: self.id,
-                            time: event.time + rx_delay as i64,
+                            time: rx_end,
                         })
                         .unwrap();
                 } // boing...
