@@ -10,7 +10,7 @@ use std::sync::mpsc;
 
 // pub type SizeByte = u64;
 //
-const PRINT :i64 = 100_000_000;
+const PRINT :i64 = 10_000_000;
 const DONE  :i64 = PRINT + 100_000;
 
 #[derive(Debug)]
@@ -78,7 +78,7 @@ pub trait Receiver {
 pub enum EventType {
     Packet (usize, Packet),
     Empty,
-    //Close,
+    Close,
     //NICEnable { nic: usize },
 }
 
@@ -161,7 +161,10 @@ impl EventReceiver {
                 let event = event_rx.recv();
                 let event = match event {
                     Ok(event) => event,
-                    Err(error) => panic!("R{} received event error <{:?}>", id, error),
+                    Err(error) => {
+                        println!("R{} received event error <{:?}>", id, error);
+                        return;
+                    }
                 };
                 //println!("R{} received event {:?}", id, event);
                 let event_time = event.time as u64;
@@ -177,15 +180,18 @@ impl EventReceiver {
 
                 // remove and if need be, add to heap
                 if old_safe_time == safe_time { // might need updating of safe_time
-                    safe_time = *last_times.values().min().unwrap(); // TODO check this gets min(value)
+                    safe_time = *last_times.values().min().unwrap();
                 }
 
                 match safe_prod.send(safe_time) {
                     Ok(_) => (),
-                    Err(error) => panic!("R{} send safetime error <{:?}>", id, error),
+                    Err(error) => {
+                        println!("R{} send safetime error <{:?}>", id, error);
+                        return
+                    }
                 };
 
-                if safe_time > DONE as u64 { return; }
+                //if safe_time > DONE as u64 { return; }
             }
         });
 
@@ -209,7 +215,10 @@ impl EventReceiver {
                 let safe_time = safe_cons.recv();
                 let safe_time = match safe_time {
                     Ok(event) => event,
-                    Err(error) => panic!("S{} received error {:?}", id, error),
+                    Err(error) => {
+                        println!("S{} received error <{:?}>", id, error);
+                        return;
+                    }
                 };
                 //println!("S{} received safe_time of {}", id, safe_time);
 
@@ -245,8 +254,12 @@ impl EventReceiver {
                     //println!("S{} sending event {:?}...", id, event);
                     match event_prod.send(event) {
                         Ok(_) => (),
-                        Err(error) => panic!("S{} send event error {:?}", id, error),
+                        Err(error) => {
+                            println!("S{} send event error <{:?}>", id, error);
+                            return;
+                        }
                     };
+
 
                     // update heap
                     match event_q_out.get_mut(&src).unwrap().pop() {
@@ -255,7 +268,7 @@ impl EventReceiver {
                     }
                 }
 
-                if safe_time > DONE as u64 { return; }
+                //if safe_time > DONE as u64 { return; }
             }
         });
 
@@ -335,7 +348,7 @@ impl Router {
     */
 
     // will never return
-    pub fn start(mut self) {
+    pub fn start(mut self) -> u64 {
         let event_channel = self.event_receiver.start();
 
         // kickstart stuff up
@@ -363,17 +376,23 @@ impl Router {
             let event = event_channel.recv();
             let event = match event {
                 Ok(event) => event,
-                Err(error) => panic!("Router {} received error {:?}", self.id, error),
+                Err(error) => {
+                    println!("Router {} received error <{:?}>", self.id, error);
+                    return self.count;
+                }
             };
             //println!("Router {} \x1b[0;3{}m got event {:?}!...\x1b[0;00m", self.id, self.id+2, event);
             if event.time > PRINT && print {
-                println!("{}", self.count);
                 print = false;
             }
             if event.time > DONE {
-                return;
+                return self.count;
             }
             match event.event_type {
+                EventType::Close => {
+                    println!("{}", self.count);
+                    //return self.count;
+                },
                 EventType::Empty => {
                     let dst = event.src;
                     let cur_time = std::cmp::max(event.time, self.out_times[&dst]);

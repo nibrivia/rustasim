@@ -25,6 +25,13 @@ fn main() {
             })
             .unwrap();
     }
+    /*hack.send(nic::Event {
+            src : 1,
+            time : 1000,
+            event_type : nic::EventType::Close,
+        })
+        .unwrap();
+    */
 
 
     println!("Run...");
@@ -32,9 +39,11 @@ fn main() {
     let handle_dst = thread::spawn(move || dst.start());
     let handle_switch = thread::spawn(move || switch.start());
 
-    handle_src.join().unwrap();
-    handle_dst.join().unwrap();
-    handle_switch.join().unwrap();
+    let src_count = handle_src.join().unwrap();
+    let dst_count = handle_dst.join().unwrap();
+    let swt_count = handle_switch.join().unwrap();
+
+    println!("{} {} {}", src_count, swt_count, dst_count);
 
     println!("done");
 }
