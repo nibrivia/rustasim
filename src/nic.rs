@@ -7,13 +7,14 @@ use std::collections::VecDeque;
 use std::collections::BinaryHeap; //TODO might be better than RadixHeapMap?
 use std::cmp::Ordering;
 //use radix_heap::RadixHeapMap;
-use std::sync::mpsc;
+//use std::sync::mpsc;
+use crossbeam::channel;
 // use crate::scheduler;
 
 // pub type SizeByte = u64;
 //
 //                    s   ms  us  ns
-const PRINT :u64 = 002_000_000_000;
+const PRINT :u64 = 004_000_000_000;
 const DONE  :u64 = PRINT + 100_000;
 
 #[derive(Debug)]
@@ -81,7 +82,7 @@ pub trait Receiver {
 
 #[derive(Debug)]
 pub enum EventType {
-    Packet (usize, Packet),
+    Packet (Packet),
     Empty,
     //Close,
     //NICEnable { nic: usize },
@@ -127,15 +128,15 @@ struct EventReceiver {
     //event_q_inc : HashMap<usize, ringbuf::Producer<Event>>,
 
     // incoming events
-    event_rx: mpsc::Receiver<Event>,
-    event_tx: mpsc::Sender<Event>,
+    event_rx: channel::Receiver<Event>,
+    event_tx: channel::Sender<Event>,
     last_times : HashMap<usize, u64>, // last event from each queue
     safe_time : u64, // last event from each queue
 }
 
 impl EventReceiver {
     pub fn new(id : usize) -> EventReceiver {
-        let (event_tx, event_rx) = mpsc::channel();
+        let (event_tx, event_rx) = channel::unbounded();
         let next_heap = BinaryHeap::new();
 
         EventReceiver {
@@ -155,7 +156,7 @@ impl EventReceiver {
         }
     }
 
-    pub fn connect_incoming(&mut self, other_id : usize) -> mpsc::Sender<Event> {
+    pub fn connect_incoming(&mut self, other_id : usize) -> channel::Sender<Event> {
         // create event queue
         let mut q = VecDeque::new(); // TODO look into effect of size on this...
         q.reserve(512);
@@ -218,6 +219,10 @@ impl Iterator for EventReceiver {
             self.event_q.get_mut(&event_src).unwrap().push_back(event);
 
             //println!("S{} received safe_time of {}", id, safe_time);
+            if self.safe_time > DONE {
+                return None;
+            }
+
             if old_safe_time < self.safe_time {
                 return self.next();
             }
@@ -234,7 +239,7 @@ pub struct Router {
 
     // event management
     event_receiver : EventReceiver,
-    out_queues : HashMap<usize, mpsc::Sender<Event>>,
+    out_queues : HashMap<usize, channel::Sender<Event>>,
     out_times  : HashMap<usize, u64>,
 
     // networking things
@@ -263,7 +268,7 @@ impl Router {
         }
     }
 
-    pub fn connect(&mut self, other : & mut Self) -> mpsc::Sender<Event> {
+    pub fn connect(&mut self, other : & mut Self) -> channel::Sender<Event> {
         let inc_channel = self.event_receiver.connect_incoming(other.id);
         let ret_channel = inc_channel.clone();
 
@@ -277,7 +282,7 @@ impl Router {
         return ret_channel; // TODO hacky...
     }
 
-    pub fn _connect(&mut self, other : &Self, tx_queue : mpsc::Sender<Event>) -> mpsc::Sender<Event> {
+    pub fn _connect(&mut self, other : &Self, tx_queue : channel::Sender<Event>) -> channel::Sender<Event> {
         self.out_queues.insert(other.id, tx_queue);
         self.out_times.insert(other.id, 0);
         //self.out_notify.insert(other.id, 0);
@@ -322,9 +327,6 @@ impl Router {
         println!("Router {} starting...", self.id);
         for event in self.event_receiver {
             //println!("@{} Router {} \x1b[0;3{}m got event {:?}!...\x1b[0;00m", event.time, self.id, self.id+2, event);
-            if event.time > DONE {
-                break;
-            }
             match event.event_type {
                 /*
                 EventType::Close => {
@@ -352,7 +354,7 @@ impl Router {
                     self.out_times.insert(dst, event.time);
                 },
 
-                EventType::Packet(src, mut packet) => {
+                EventType::Packet(mut packet) => {
                     //println!("@{} Router {} received {:?} from {}", event.time, self.id, packet, src);
                     self.count += 1;
                     if packet.dst == self.id {
@@ -373,7 +375,7 @@ impl Router {
                     //println!("@{} Router {} sent {:?} to {}", event.time, self.id, packet, next_hop);
                     self.out_queues[&next_hop]
                         .send(Event{
-                            event_type : EventType::Packet(src, packet),
+                            event_type : EventType::Packet(packet),
                             src: self.id,
                             time: rx_end,
                         })

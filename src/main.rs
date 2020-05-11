@@ -21,7 +21,7 @@ fn main() {
         hack.send(nic::Event {
                 src : 1,
                 time : 0,
-                event_type : nic::EventType::Packet(1, packet),
+                event_type : nic::EventType::Packet(packet),
             })
             .unwrap();
     }
