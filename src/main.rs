@@ -12,31 +12,15 @@ fn main() {
     // Create entities
     // TODO create separate racks
     let mut servers : Vec<Router> = Vec::new();
-    //let mut ins     = Vec::new();
     //let mut switch0 = Router::new(0);
-    //let mut switch1 = Router::new(100);
-    //switch0.connect(&mut switch1);
 
-    let n_servers = 4;
+    let n_servers = 37;
 
     for id in 0..n_servers {
         let mut s = Router::new(id);
         for id2 in 0..id {
             s.connect(servers.get_mut(id2).unwrap());
-            /*
-            if id == 2 && id2 == 0 {
-                let t = servers.get_mut(id2).unwrap().connect(&mut s);
-                ins.insert(0, t);
-                continue;
-            } else {
-                let t = s.connect(servers.get_mut(id2).unwrap());
-                if id2 == 0 || id == 2 && id2 == 1{
-                    ins.push(t);
-                }
-            }
-            */
         }
-        //s.connect(&mut switch1);
         servers.push(s);
     }
 
@@ -69,8 +53,6 @@ fn main() {
     println!("Run...");
 
     // Start each switch in its own thread
-    //let handle_switch0 = thread::spawn(move || switch0.start());
-    //let handle_switch1 = thread::spawn(move || switch1.start());
     let mut handles = Vec::new();
     for s in servers {
         handles.push(thread::spawn(move || s.start()));
@@ -83,12 +65,9 @@ fn main() {
         counts.push(c);
     }
 
-    let swt0_count = 0;
-    let swt1_count = 0;
-
-    println!("{:?}+{}+{} = {}",
-        counts, swt0_count, swt1_count,
-        counts.iter().sum::<u64>() + swt0_count + swt1_count,
+    println!("{:?} = {}",
+        counts,
+        counts.iter().sum::<u64>()
         );
 
     println!("done");
