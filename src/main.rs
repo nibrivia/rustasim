@@ -10,7 +10,7 @@ fn main() {
     let mut ins     = Vec::new();
     let mut switch = nic::Router::new(0);
 
-    let n_servers = 4;
+    let n_servers = 10;
 
     for id in 1..n_servers+1 {
         let mut s = nic::Router::new(id);
@@ -36,11 +36,11 @@ fn main() {
     println!("Run...");
 
     // Start each switch in its own thread
+    let handle_switch = thread::spawn(move || switch.start());
     let mut handles = Vec::new();
     for s in servers {
         handles.push(thread::spawn(move || s.start()));
     }
-    let handle_switch = thread::spawn(move || switch.start());
 
     // Get the results
     let mut counts = Vec::new();
