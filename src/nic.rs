@@ -174,36 +174,10 @@ impl Router {
 
         println!("Router {} starting...", self.id);
         for event in self.event_receiver {
-        //let (prod, cons) = channel::bounded(64);
-        //self.event_receiver.start(prod);
-        //loop {
-            //let event = cons.recv().unwrap();
-            //println!("@{} Router {} \x1b[0;3{}m got event {:?}\x1b[0;00m", event.time, self.id, self.id+2, event);
-            /*
-            if event.time > DONE {
-                for c in &self.out_queues {
-                    c.send(Event{
-                        event_type: EventType::Update,
-                        src: self.id,
-                        time: DONE+self.latency_ns,
-                    }).unwrap();
-                }
-                break;
-            }
-            */
-
             match event.event_type {
-                /*
-                EventType::Close => {
-                    println!("{}", self.count);
-                    return self.count;
-                },*/
-
-
                 // This comes from below
                 EventType::Missing(dsts) => {
-                    // whoever sent us this needs to know how far they can advance
-                    // update them
+                    // We need the time from these friendos
                     for dst_ix in dsts {
                         self.out_queues[dst_ix].send(Event{
                             event_type: EventType::Update,
