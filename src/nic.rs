@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use crossbeam::channel;
+use ringbuf::*;
+//use crossbeam::channel;
 
 use crate::synchronizer::*;
 
@@ -73,7 +74,7 @@ pub struct Router {
 
     // event management
     event_receiver : EventReceiver,
-    out_queues : Vec<channel::Sender<Event>>,
+    out_queues : Vec<Producer<Event>>,
     out_times  : Vec<u64>,
 
     // networking things
@@ -105,9 +106,16 @@ impl Router {
         }
     }
 
-    pub fn connect(&mut self, other : & mut Self) -> channel::Sender<Event> {
+    pub fn init_queue(&mut self, dst : usize, events : Vec<Event>) {
+        let dst_ix = self.id_to_ix[&dst];
+        for e in events {
+            self.out_queues[dst_ix].push(e).unwrap();
+        }
+    }
+
+    pub fn connect(&mut self, other : & mut Self) {
         let inc_channel = self.event_receiver.connect_incoming(other.id, self.next_ix);
-        let ret_channel = inc_channel.clone();
+        //let ret_channel = inc_channel.clone();
 
         self.id_to_ix.insert(other.id, self.next_ix);
 
@@ -121,10 +129,10 @@ impl Router {
 
         self.next_ix += 1;
 
-        return ret_channel; // TODO hacky...
+        //return &mut inc_channel; // TODO hacky...
     }
 
-    pub fn _connect(&mut self, other : &Self, tx_queue : channel::Sender<Event>) -> channel::Sender<Event> {
+    pub fn _connect(&mut self, other : &Self, tx_queue : Producer<Event>) -> Producer<Event> {
         self.id_to_ix.insert(other.id, self.next_ix);
 
         self.out_queues.push(tx_queue);
@@ -153,8 +161,8 @@ impl Router {
 
         // kickstart stuff up
         //if self.id != 1 {
-        for (dst_ix, out_q) in self.out_queues.iter().enumerate() {
-            out_q.send(Event{
+        for (dst_ix, out_q) in self.out_queues.iter_mut().enumerate() {
+            out_q.push(Event{
                 event_type: EventType::Update,
                 src: self.id,
                 time: self.latency_ns,
@@ -177,32 +185,32 @@ impl Router {
             match event.event_type {
                 // This comes from below
                 EventType::Missing(dsts) => {
-                    // We need the time from these friendos
-                    for dst_ix in dsts {
-                        self.out_queues[dst_ix].send(Event{
-                            event_type: EventType::Update,
-                            src: self.id,
-                            time: event.time + self.latency_ns,
-                        }).unwrap();
-                    }
-                },
-
-                EventType::Update => {
-                    self.out_queues[event.src].send(Event{
-                        event_type: EventType::Response,
+                // We need the time from these friendos
+                for dst_ix in dsts {
+                    self.out_queues[dst_ix].push(Event{
+                        event_type: EventType::Update,
                         src: self.id,
-                        time: self.out_times[event.src] + self.latency_ns,
+                        time: event.time + self.latency_ns,
                     }).unwrap();
-                },
+                }
+            },
 
-                EventType::Response => {},
+            EventType::Update => {
+                self.out_queues[event.src].push(Event{
+                    event_type: EventType::Response,
+                    src: self.id,
+                    time: self.out_times[event.src] + self.latency_ns,
+                }).unwrap();
+            },
 
-                EventType::Packet(mut packet) => {
-                    //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m", self.id+1, event.time, self.id, packet, event.src);
-                    self.count += 1;
-                    if packet.dst == self.id {
-                        // bounce!
-                        packet.dst = packet.src;
+            EventType::Response => {},
+
+            EventType::Packet(mut packet) => {
+                //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m", self.id+1, event.time, self.id, packet, event.src);
+                self.count += 1;
+                if packet.dst == self.id {
+                    // bounce!
+                    packet.dst = packet.src;
                         packet.src = self.id;
                     }
 
@@ -218,7 +226,7 @@ impl Router {
                     //println!("\x1b[0;3{}m@{} Router {} sent {:?} to {}@{}", self.id+1, event.time, self.id, packet, next_hop, rx_end);
                     // go
                     if let Err(_) = self.out_queues[next_hop_ix]
-                        .send(Event{
+                        .push(Event{
                             event_type : EventType::Packet(packet),
                             src: self.id,
                             time: rx_end,

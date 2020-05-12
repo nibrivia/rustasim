@@ -12,16 +12,18 @@ fn main() {
     // Create entities
     // TODO create separate racks
     let mut servers : Vec<Router> = Vec::new();
-    let mut ins     = Vec::new();
+    //let mut ins     = Vec::new();
     //let mut switch0 = Router::new(0);
     //let mut switch1 = Router::new(100);
     //switch0.connect(&mut switch1);
 
-    let n_servers = 14;
+    let n_servers = 4;
 
     for id in 0..n_servers {
         let mut s = Router::new(id);
         for id2 in 0..id {
+            s.connect(servers.get_mut(id2).unwrap());
+            /*
             if id == 2 && id2 == 0 {
                 let t = servers.get_mut(id2).unwrap().connect(&mut s);
                 ins.insert(0, t);
@@ -32,6 +34,7 @@ fn main() {
                     ins.push(t);
                 }
             }
+            */
         }
         //s.connect(&mut switch1);
         servers.push(s);
@@ -40,20 +43,26 @@ fn main() {
     // TODO find a way to create a "world" object
     for src in 0..n_servers {
         for dst in 0..n_servers {
+            // skip self->self
             if src == dst {
                 continue
             }
+
+            // create flow
             let f = Flow::new(src, (dst)%n_servers, 40);
             println!("{:?}", f);
-            let hack = & ins[f.src];
+
+            // schedule on source
+            let mut packets = Vec::new();
             for packet in f {
-                hack.send(Event {
+                packets.push(Event {
                         src : dst,
                         time : 0,
                         event_type : EventType::Packet(packet),
-                    })
-                    .unwrap();
+                    });
             }
+            let dst_server = servers.get_mut(dst).unwrap();
+            dst_server.init_queue(src, packets);
         }
     }
 
