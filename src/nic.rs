@@ -60,12 +60,6 @@ impl Iterator for Flow {
     }
 }
 
-/*
-pub trait Receiver {
-    fn receive(&mut self, time: i64, event_queue: &mut BinaryHeap<Event>, packet: Packet);
-}
-*/
-
 
 pub struct Router {
     id : usize,
@@ -83,7 +77,7 @@ pub struct Router {
     out_times  : Vec<u64>,
 
     // networking things
-    route : HashMap<usize, usize>,
+    route : Vec<usize>,
 
     // stats
     count: u64,
@@ -105,7 +99,7 @@ impl Router {
             out_times  : Vec::new(),
             //out_notify : HashMap::new(),
 
-            route : HashMap::new(),
+            route : Vec::new(),
 
             count : 0,
         }
@@ -122,7 +116,7 @@ impl Router {
         self.out_times.push(0);
         //self.out_notify.insert(other.id, 0);
 
-        self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
+        // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
 
         self.next_ix += 1;
 
@@ -134,9 +128,9 @@ impl Router {
 
         self.out_queues.push(tx_queue);
         self.out_times.push(0);
-        //self.out_notify.insert(other.id, 0);
+        //self.out_notify.insert(other.id, 0);64
 
-        self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
+        // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
 
         let chan = self.event_receiver.connect_incoming(other.id, self.next_ix);
 
@@ -168,20 +162,21 @@ impl Router {
         }
         //}
 
-        for dst in 0..101 {
-            if !self.route.contains_key(&dst) {
-                self.route.insert(dst, 0);//self.id_to_ix[&0]);
-                /*if dst%2 == 0 {
-                    self.route.insert(dst, 0);//self.id_to_ix[&0]);
-                } else {
-                    self.route.insert(dst, 1);//self.id_to_ix[&100]);
-                }
-                */
+        // route is an id->ix structure
+        for dst in 0..11 {
+            if self.id_to_ix.contains_key(&dst) {
+                self.route.push(self.id_to_ix[&dst]);
+            } else {
+                self.route.push(0);
             }
         }
 
         println!("Router {} starting...", self.id);
         for event in self.event_receiver {
+        //let (prod, cons) = channel::bounded(64);
+        //self.event_receiver.start(prod);
+        //loop {
+            //let event = cons.recv().unwrap();
             //println!("@{} Router {} \x1b[0;3{}m got event {:?}!...\x1b[0;00m", event.time, self.id, self.id+2, event);
             if event.time > DONE {
                 for c in &self.out_queues {
@@ -203,7 +198,6 @@ impl Router {
 
                 EventType::Empty => {
                     // whoever sent us this needs to know how far they can advance
-                    //let dst_ix = self.id_to_ix[&event.src];
                     let dst_ix = event.src;
 
                     // see if we need to send them anything
@@ -232,7 +226,7 @@ impl Router {
                     }
 
                     // who
-                    let next_hop_ix = self.route[&packet.dst];
+                    let next_hop_ix = self.route[packet.dst];
 
                     // when
                     let cur_time = std::cmp::max(event.time, self.out_times[next_hop_ix]);

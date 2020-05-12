@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 use std::collections::HashMap;
-//use ringbuf::RingBuffer;
 use std::collections::BinaryHeap;
 use std::cmp::Ordering;
+use std::thread;
 use crossbeam::channel;
 
 use crate::nic::*;
@@ -56,7 +56,6 @@ pub struct EventReceiver {
 
     // outgoing events
     next_heap : BinaryHeap<NextEvent>, // contains <=one event from each src
-    next_event_time : u64,
     missing_srcs : Vec<usize>, // which srcs are missing
 
     event_q : Vec<VecDeque<Event>>,
@@ -71,7 +70,7 @@ pub struct EventReceiver {
 
 impl EventReceiver {
     pub fn new(id : usize) -> EventReceiver {
-        let (event_tx, event_rx) = channel::bounded(512); // TODO think about size
+        let (event_tx, event_rx) = channel::bounded(64); // TODO think about size
         let next_heap = BinaryHeap::new();
 
         EventReceiver {
@@ -79,7 +78,6 @@ impl EventReceiver {
             id_to_ix : HashMap::new(),
 
             next_heap,
-            next_event_time : 0,
             missing_srcs : Vec::new(),
 
             event_q : Vec::new(),
@@ -106,67 +104,82 @@ impl EventReceiver {
         // let them know how to add events
         return self.event_tx.clone();
     }
+    
+    pub fn start(self, channel : channel::Sender<Event>) {
+        thread::spawn(move || {
+            for event in self {
+                channel.send(event).unwrap();
+            }
+        });
+    }
 }
 
 impl Iterator for EventReceiver {
     type Item = Event;
 
     fn next(&mut self) -> Option<Event> {
-        // refill our heap with the missing sources
-        let mut new_missing : Vec<usize> = Vec::new();
-        for src in self.missing_srcs.iter() {
-            // pop front of queue, if queue empty, keep in missing_srcs
-            match self.event_q[*src].front() {
-                None => { new_missing.push(*src); () },
-                Some(event) => self.next_heap.push((DONE-event.time, *src)),
-            }
-        }
-        self.missing_srcs = new_missing;
+        // copy self state to local, will update on exit
+        let mut safe_time = self.safe_time;
 
-        // process events if we've heard form everyone and up till safe time
-        if self.missing_srcs.is_empty() && DONE-self.next_heap.peek().unwrap().0 <= self.safe_time {
-            let (_, src_ix) = self.next_heap.pop().unwrap();
-            let event = self.event_q[src_ix].pop_front().unwrap();
-
-            // update next event heap
-            self.missing_srcs.push(src_ix);
-
-            // return event
-            return Some(event);
-        }
-        //println!("{} missing srcs {:?}", self.id, self.missing_srcs);
-
-
-
-        // we have no more events to send... wait...
         loop {
-            // read in event from channel, block if need be
-            //println!("Router {} waiting for events...", self.id);
-            let mut event = self.event_rx.recv().unwrap();
+            // refill our heap with the missing sources
+            let mut new_missing : Vec<usize> = Vec::new();
+            for src in self.missing_srcs.iter() {
+                // pop front of queue, if queue empty, keep in missing_srcs
+                match self.event_q[*src].front() {
+                    None => { new_missing.push(*src); () },
+                    Some(event) => self.next_heap.push((DONE-event.time, *src)),
+                }
+            }
+            self.missing_srcs = new_missing;
 
-            // find out the ix we care about
-            let event_src_ix = self.id_to_ix[&event.src];
-            event.src = event_src_ix; // this ends up helping our parent too
+            // process events if we've heard form everyone and up till safe time
+            if self.missing_srcs.is_empty() && DONE-self.next_heap.peek().unwrap().0 <= safe_time {
+                let (_, src_ix) = self.next_heap.pop().unwrap();
+                let event = self.event_q[src_ix].pop_front().unwrap();
 
-            //println!("R{} received event {:?}", id, event);
-            let event_time = event.time;
+                // update next event heap
+                //self.missing_srcs.push(src_ix);
 
-            // update safe proc time, needs to happen after append
-            let old_last_time = self.last_times[event_src_ix];
-            self.last_times[event_src_ix] = event_time;
+                match self.event_q[src_ix].front() {
+                    None => { self.missing_srcs.push(src_ix); () },
+                    Some(event) => self.next_heap.push((DONE-event.time, src_ix)),
+                }
 
-            // update safe time if need be
-            let old_safe_time = self.safe_time;
-            if self.safe_time == old_last_time {
-                self.safe_time = *self.last_times.iter().min().unwrap();
+                // return event
+                self.safe_time = safe_time;
+                return Some(event);
+            }
+            //println!("{} missing srcs {:?}", self.id, self.missing_srcs);
+
+            if safe_time > DONE {
+                return None;
             }
 
-            // enq in appropriate event queue
-            self.event_q[event_src_ix].push_back(event);
+            // keep trying until safe_time updates
+            let old_safe_time = safe_time;
+            while old_safe_time == safe_time {
+                // read in event from channel, block if need be
+                // TODO use try_recv, if empty, poke above for sending an Empty
+                let mut event = self.event_rx.recv().unwrap();
+                let event_time = event.time;
+                let event_src  = event.src;
 
-            // safe time got updated, return the next event
-            if old_safe_time < self.safe_time {
-                return self.next();
+                // find out the ix we care about
+                let event_src_ix = self.id_to_ix[&event_src];
+                event.src = event_src_ix; // this ends up helping our parent too
+
+                // enq in appropriate event queue
+                self.event_q[event_src_ix].push_back(event);
+
+                // update safe proc time
+                let old_last_time = self.last_times[event_src_ix];
+                self.last_times[event_src_ix] = event_time;
+
+                // update safe time if need be
+                if old_safe_time == old_last_time {
+                    safe_time = *self.last_times.iter().min().unwrap();
+                }
             }
         }
     }
