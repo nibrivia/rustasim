@@ -3,19 +3,22 @@ use std::collections::HashMap;
 use std::collections::BinaryHeap;
 use std::cmp::Ordering;
 use std::thread;
+use core::time::Duration;
 use crossbeam::channel;
 
 use crate::nic::*;
 
 //                    s   ms  us  ns
-const PRINT :u64 = 004_000_000_000;
+const PRINT :u64 = 001_000_000_000;
 //const PRINT :u64 = 000_001_000_000;
 pub const DONE  :u64 = PRINT + 100_000;
 
 #[derive(Debug)]
 pub enum EventType {
     Packet (Packet),
-    Empty,
+    Missing (Vec<usize>),
+    Update,
+    Response,
     //Close,
     //NICEnable { nic: usize },
 }
@@ -63,6 +66,7 @@ pub struct EventReceiver {
     // incoming events
     event_rx: channel::Receiver<Event>,
     event_tx: channel::Sender<Event>,
+    last_missing: u64,
     last_times : Vec<u64>, // last event from each queue
     safe_time : u64, // last event from each queue
 
@@ -70,7 +74,7 @@ pub struct EventReceiver {
 
 impl EventReceiver {
     pub fn new(id : usize) -> EventReceiver {
-        let (event_tx, event_rx) = channel::bounded(64); // TODO think about size
+        let (event_tx, event_rx) = channel::bounded(1024); // TODO think about size
         let next_heap = BinaryHeap::new();
 
         EventReceiver {
@@ -86,6 +90,7 @@ impl EventReceiver {
             event_tx,
             last_times : Vec::new(),
             safe_time : 0,
+            last_missing : 0,
         }
     }
 
@@ -152,7 +157,7 @@ impl Iterator for EventReceiver {
             }
             //println!("{} missing srcs {:?}", self.id, self.missing_srcs);
 
-            if safe_time > DONE {
+            if safe_time >= DONE {
                 return None;
             }
 
@@ -161,7 +166,29 @@ impl Iterator for EventReceiver {
             while old_safe_time == safe_time {
                 // read in event from channel, block if need be
                 // TODO use try_recv, if empty, poke above for sending an Empty
-                let mut event = self.event_rx.recv().unwrap();
+                let event = self.event_rx.recv_timeout(Duration::from_micros(80));
+                let mut event = match event {
+                    Ok(event) => event,
+                    Err(_err) => {
+                        if self.last_missing == safe_time {
+                            continue;
+                        }
+
+                        let mut missing = Vec::new();
+                        for (ix, _) in self.last_times.iter().enumerate() {
+                            if self.last_times[ix] == safe_time {
+                                missing.push(ix);
+                            }
+                        }
+                        self.last_missing = safe_time;
+                        return Some(Event{
+                            time: safe_time,
+                            src: 0,
+                            event_type : EventType::Missing(missing),
+                            });
+                    }
+                };
+
                 let event_time = event.time;
                 let event_src  = event.src;
 
@@ -170,7 +197,12 @@ impl Iterator for EventReceiver {
                 event.src = event_src_ix; // this ends up helping our parent too
 
                 // enq in appropriate event queue
-                self.event_q[event_src_ix].push_back(event);
+
+                if let EventType::Update = event.event_type {
+                    return Some(event); // they need a response immediately
+                } else {
+                    self.event_q[event_src_ix].push_back(event);
+                }
 
                 // update safe proc time
                 let old_last_time = self.last_times[event_src_ix];

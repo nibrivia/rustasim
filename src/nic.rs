@@ -116,6 +116,7 @@ impl Router {
         self.out_times.push(0);
         //self.out_notify.insert(other.id, 0);
 
+        //self.route.
         // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
 
         self.next_ix += 1;
@@ -154,7 +155,7 @@ impl Router {
         //if self.id != 1 {
         for (dst_ix, out_q) in self.out_queues.iter().enumerate() {
             out_q.send(Event{
-                event_type: EventType::Empty,
+                event_type: EventType::Update,
                 src: self.id,
                 time: self.latency_ns,
             }).unwrap();
@@ -163,7 +164,7 @@ impl Router {
         //}
 
         // route is an id->ix structure
-        for dst in 0..11 {
+        for dst in 0..41 {
             if self.id_to_ix.contains_key(&dst) {
                 self.route.push(self.id_to_ix[&dst]);
             } else {
@@ -177,17 +178,19 @@ impl Router {
         //self.event_receiver.start(prod);
         //loop {
             //let event = cons.recv().unwrap();
-            //println!("@{} Router {} \x1b[0;3{}m got event {:?}!...\x1b[0;00m", event.time, self.id, self.id+2, event);
+            //println!("@{} Router {} \x1b[0;3{}m got event {:?}\x1b[0;00m", event.time, self.id, self.id+2, event);
+            /*
             if event.time > DONE {
                 for c in &self.out_queues {
                     c.send(Event{
-                        event_type: EventType::Empty,
+                        event_type: EventType::Update,
                         src: self.id,
                         time: DONE+self.latency_ns,
                     }).unwrap();
                 }
                 break;
             }
+            */
 
             match event.event_type {
                 /*
@@ -196,25 +199,29 @@ impl Router {
                     return self.count;
                 },*/
 
-                EventType::Empty => {
+
+                // This comes from below
+                EventType::Missing(dsts) => {
                     // whoever sent us this needs to know how far they can advance
-                    let dst_ix = event.src;
-
-                    // see if we need to send them anything
-                    if event.time < self.out_times[dst_ix] {
-                        continue
-                    }
-
                     // update them
-                    self.out_queues[dst_ix].send(Event{
-                        event_type: EventType::Empty,
-                        src: self.id,
-                        time: event.time + self.latency_ns,
-                    }).unwrap();
-
-                    // update our notion of their time
-                    self.out_times[dst_ix] = event.time;
+                    for dst_ix in dsts {
+                        self.out_queues[dst_ix].send(Event{
+                            event_type: EventType::Update,
+                            src: self.id,
+                            time: event.time + self.latency_ns,
+                        }).unwrap();
+                    }
                 },
+
+                EventType::Update => {
+                    self.out_queues[event.src].send(Event{
+                        event_type: EventType::Response,
+                        src: self.id,
+                        time: self.out_times[event.src] + self.latency_ns,
+                    }).unwrap();
+                },
+
+                EventType::Response => {},
 
                 EventType::Packet(mut packet) => {
                     //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m", self.id+1, event.time, self.id, packet, event.src);
@@ -226,7 +233,8 @@ impl Router {
                     }
 
                     // who
-                    let next_hop_ix = self.route[packet.dst];
+                    //let next_hop_ix = self.route[packet.dst];
+                    let next_hop_ix = self.id_to_ix[&packet.dst];
 
                     // when
                     let cur_time = std::cmp::max(event.time, self.out_times[next_hop_ix]);
