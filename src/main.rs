@@ -3,18 +3,18 @@ use std::thread;
 pub mod nic;
 pub mod synchronizer;
 
-use crate::synchronizer::*;
 use crate::nic::*;
+use crate::synchronizer::*;
 
 fn main() {
     println!("Setup...");
 
     // Create entities
     // TODO create separate racks
-    let mut servers : Vec<Router> = Vec::new();
+    let mut servers: Vec<Router> = Vec::new();
     //let mut switch0 = Router::new(0);
 
-    let n_servers = 37;
+    let n_servers = 14;
 
     for id in 0..n_servers {
         let mut s = Router::new(id);
@@ -29,21 +29,21 @@ fn main() {
         for dst in 0..n_servers {
             // skip self->self
             if src == dst {
-                continue
+                continue;
             }
 
             // create flow
-            let f = Flow::new(src, (dst)%n_servers, 40);
+            let f = Flow::new(src, (dst) % n_servers, 40);
             println!("{:?}", f);
 
             // schedule on source
             let mut packets = Vec::new();
             for packet in f {
                 packets.push(Event {
-                        src : dst,
-                        time : 0,
-                        event_type : EventType::Packet(packet),
-                    });
+                    src: dst,
+                    time: 0,
+                    event_type: EventType::Packet(packet),
+                });
             }
             let dst_server = servers.get_mut(dst).unwrap();
             dst_server.init_queue(src, packets);
@@ -65,11 +65,7 @@ fn main() {
         counts.push(c);
     }
 
-    println!("{:?} = {}",
-        counts,
-        counts.iter().sum::<u64>()
-        );
+    println!("{:?} = {}", counts, counts.iter().sum::<u64>());
 
     println!("done");
 }
-

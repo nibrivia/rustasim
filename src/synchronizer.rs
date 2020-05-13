@@ -1,7 +1,7 @@
 //use std::collections::VecDeque;
-use std::collections::HashMap;
-use std::collections::BinaryHeap;
 use std::cmp::Ordering;
+use std::collections::BinaryHeap;
+use std::collections::HashMap;
 use std::thread;
 //use ringbuf::Ringbuffer;
 use ringbuf::*;
@@ -11,15 +11,15 @@ use crossbeam::channel;
 use crate::nic::*;
 
 //                    s   ms  us  ns
-const PRINT :u64 = 001_000_000_000;
+const PRINT: u64 = 001_000_000_000;
 //const PRINT :u64 = 000_001_000_000;
-pub const DONE  :u64 = PRINT + 100_000;
+pub const DONE: u64 = PRINT + 100_000;
 //const OFFSET    :u64 = DONE  + 100_000;
 
 #[derive(Debug)]
 pub enum EventType {
-    Packet (Packet),
-    Missing (Vec<usize>),
+    Packet(Packet),
+    Missing(Vec<usize>),
     Update,
     Response,
     //Close,
@@ -29,7 +29,7 @@ pub enum EventType {
 #[derive(Debug)]
 pub struct Event {
     pub time: u64,
-    pub src : usize,
+    pub src: usize,
     pub event_type: EventType,
     //function: Box<dyn FnOnce() -> ()>,
 }
@@ -43,7 +43,6 @@ impl Ord for Event {
 impl PartialOrd for Event {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
-
     }
 }
 
@@ -55,37 +54,36 @@ impl PartialEq for Event {
 impl Eq for Event {} // don't use function
 
 pub struct EventReceiver {
-    id : usize,
-    id_to_ix : HashMap<usize, usize>,
+    id: usize,
+    id_to_ix: HashMap<usize, usize>,
 
     // outgoing events
-    next_heap : BinaryHeap<Event>, // contains <=one event from each src
-    missing_srcs : Vec<usize>, // which srcs are missing
+    next_heap: BinaryHeap<Event>, // contains <=one event from each src
+    missing_srcs: Vec<usize>,     // which srcs are missing
 
-    event_q : Vec<Consumer<Event>>,
+    event_q: Vec<Consumer<Event>>,
 
-    safe_time : u64, // last event from each queue
-
+    safe_time: u64, // last event from each queue
 }
 
 impl EventReceiver {
-    pub fn new(id : usize) -> EventReceiver {
+    pub fn new(id: usize) -> EventReceiver {
         let next_heap = BinaryHeap::new();
 
         EventReceiver {
             id,
-            id_to_ix : HashMap::new(),
+            id_to_ix: HashMap::new(),
 
             next_heap,
-            missing_srcs : Vec::new(),
+            missing_srcs: Vec::new(),
 
-            event_q : Vec::new(),
+            event_q: Vec::new(),
 
-            safe_time : 0,
+            safe_time: 0,
         }
     }
 
-    pub fn connect_incoming(&mut self, other_id : usize, other_ix : usize) -> Producer<Event> {
+    pub fn connect_incoming(&mut self, other_id: usize, other_ix: usize) -> Producer<Event> {
         // create event queue
         let q = RingBuffer::new(128);
         let (prod, cons) = q.split();
@@ -98,8 +96,8 @@ impl EventReceiver {
 
         return prod;
     }
-    
-    pub fn start(self, channel : channel::Sender<Event>) {
+
+    pub fn start(self, channel: channel::Sender<Event>) {
         thread::spawn(move || {
             for event in self {
                 channel.send(event).unwrap();
@@ -117,9 +115,9 @@ impl Iterator for EventReceiver {
 
         loop {
             // process events if we've heard form everyone or up till safe time
-            if self.missing_srcs.is_empty() ||
-                (!self.next_heap.is_empty() && self.next_heap.peek().unwrap().time <= safe_time) {
-
+            if self.missing_srcs.is_empty()
+                || (!self.next_heap.is_empty() && self.next_heap.peek().unwrap().time <= safe_time)
+            {
                 // get the next event
                 let mut event = self.next_heap.pop().unwrap();
                 let event_src_ix = self.id_to_ix[&event.src];
@@ -127,7 +125,10 @@ impl Iterator for EventReceiver {
 
                 // refill what we just emptied
                 match self.event_q[event_src_ix].pop() {
-                    None => { self.missing_srcs.push(event.src); () },
+                    None => {
+                        self.missing_srcs.push(event.src);
+                        ()
+                    }
                     Some(event) => self.next_heap.push(event),
                 }
 
@@ -148,16 +149,18 @@ impl Iterator for EventReceiver {
             }
 
             // refill our heap with the missing sources
-            let mut new_missing : Vec<usize> = Vec::new();
+            let mut new_missing: Vec<usize> = Vec::new();
             for src in self.missing_srcs.iter() {
                 // pop front of queue, if queue empty, keep in missing_srcs
                 match self.event_q[*src].pop() {
-                    None => { new_missing.push(*src); () },
+                    None => {
+                        new_missing.push(*src);
+                        ()
+                    }
                     Some(event) => self.next_heap.push(event),
                 }
             }
             self.missing_srcs = new_missing;
-
         }
     }
 }
