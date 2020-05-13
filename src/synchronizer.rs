@@ -6,12 +6,6 @@ use ringbuf::*;
 
 use crate::tcp::*;
 
-// TODO pass in limits as arguments
-//                  s   ms  us  ns
-const PRINT: u64 = 001_000_000_000;
-pub const DONE: u64 = PRINT + 100_000;
-
-
 
 #[derive(Debug)]
 pub enum EventType {
@@ -19,7 +13,7 @@ pub enum EventType {
     Missing(Vec<usize>),
     Update,
     Response,
-    //Close,
+    Close,
     //NICEnable { nic: usize },
 }
 
@@ -140,11 +134,6 @@ impl Iterator for EventScheduler {
             //println!("{} missing srcs {:?}", self.id, self.missing_srcs);
 
             // TODO implement "Update" mechanism
-
-            // done!
-            if safe_time >= DONE {
-                return None;
-            }
 
             // refill our heap with the missing sources
             let mut new_missing: Vec<usize> = Vec::new();

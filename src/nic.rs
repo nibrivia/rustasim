@@ -119,6 +119,8 @@ impl Router {
         println!("Router {} starting...", self.id);
         for event in self.event_receiver {
             match event.event_type {
+                EventType::Close => break,
+
                 // This comes from below
                 EventType::Missing(dsts) => {
                     // We need the time from these friendos
@@ -131,7 +133,7 @@ impl Router {
                             })
                             .unwrap();
                     }
-                }
+                },
 
                 EventType::Update => {
                     self.out_queues[event.src]
@@ -143,7 +145,7 @@ impl Router {
                         .unwrap();
                 }
 
-                EventType::Response => {}
+                EventType::Response => {},
 
                 EventType::Packet(mut packet) => {
                     //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m", self.id+1, event.time, self.id, packet, event.src);
