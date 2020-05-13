@@ -53,7 +53,7 @@ impl PartialEq for Event {
 }
 impl Eq for Event {} // don't use function
 
-pub struct EventReceiver {
+pub struct EventScheduler {
     id: usize,
     id_to_ix: HashMap<usize, usize>,
 
@@ -66,11 +66,11 @@ pub struct EventReceiver {
     safe_time: u64, // last event from each queue
 }
 
-impl EventReceiver {
-    pub fn new(id: usize) -> EventReceiver {
+impl EventScheduler {
+    pub fn new(id: usize) -> EventScheduler {
         let next_heap = BinaryHeap::new();
 
-        EventReceiver {
+        EventScheduler {
             id,
             id_to_ix: HashMap::new(),
 
@@ -106,7 +106,7 @@ impl EventReceiver {
     }
 }
 
-impl Iterator for EventReceiver {
+impl Iterator for EventScheduler {
     type Item = Event;
 
     fn next(&mut self) -> Option<Event> {

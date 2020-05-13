@@ -72,7 +72,7 @@ pub struct Router {
     next_ix: usize,
 
     // event management
-    event_receiver: EventReceiver,
+    event_receiver: EventScheduler,
     out_queues: Vec<Producer<Event>>,
     out_times: Vec<u64>,
 
@@ -93,7 +93,7 @@ impl Router {
             id_to_ix: HashMap::new(),
             next_ix: 0,
 
-            event_receiver: EventReceiver::new(id),
+            event_receiver: EventScheduler::new(id),
             out_queues: Vec::new(),
             out_times: Vec::new(),
             //out_notify : HashMap::new(),
@@ -145,7 +145,6 @@ impl Router {
     }
     */
 
-    // will never return
     pub fn start(mut self) -> u64 {
         // kickstart stuff up
         for (dst_ix, out_q) in self.out_queues.iter_mut().enumerate() {
