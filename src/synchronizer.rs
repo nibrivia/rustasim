@@ -1,20 +1,17 @@
-//use std::collections::VecDeque;
+use std::fmt;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
-use std::thread;
-//use ringbuf::Ringbuffer;
 use ringbuf::*;
-//use core::time::Duration;
-use crossbeam::channel;
 
-use crate::nic::*;
+use crate::tcp::*;
 
-//                    s   ms  us  ns
+// TODO pass in limits as arguments
+//                  s   ms  us  ns
 const PRINT: u64 = 001_000_000_000;
-//const PRINT :u64 = 000_001_000_000;
 pub const DONE: u64 = PRINT + 100_000;
-//const OFFSET    :u64 = DONE  + 100_000;
+
+
 
 #[derive(Debug)]
 pub enum EventType {
@@ -53,6 +50,9 @@ impl PartialEq for Event {
 }
 impl Eq for Event {} // don't use function
 
+
+
+
 pub struct EventScheduler {
     id: usize,
     id_to_ix: HashMap<usize, usize>,
@@ -64,6 +64,12 @@ pub struct EventScheduler {
     event_q: Vec<Consumer<Event>>,
 
     safe_time: u64, // last event from each queue
+}
+
+impl fmt::Display for EventScheduler {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "EventScheduler for {}", self.id)
+    }
 }
 
 impl EventScheduler {
@@ -95,14 +101,6 @@ impl EventScheduler {
         self.missing_srcs.push(other_ix);
 
         return prod;
-    }
-
-    pub fn start(self, channel: channel::Sender<Event>) {
-        thread::spawn(move || {
-            for event in self {
-                channel.send(event).unwrap();
-            }
-        });
     }
 }
 

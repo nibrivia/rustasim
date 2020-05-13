@@ -1,65 +1,8 @@
+use std::fmt;
 use ringbuf::*;
 use std::collections::HashMap;
-//use crossbeam::channel;
 
 use crate::synchronizer::*;
-
-#[derive(Debug)]
-pub struct Packet {
-    src: usize,
-    dst: usize,
-    seq_num: u64,
-    size_byte: u64,
-
-    ttl: u64,
-    sent_ns: u64,
-}
-
-#[derive(Debug)]
-pub struct Flow {
-    pub src: usize,
-    pub dst: usize,
-    pub size_byte: u64,
-
-    cwnd: u64,
-    next_seq: u64,
-}
-
-const BYTES_PER_PACKET: u64 = 1500;
-
-impl Flow {
-    pub fn new(src: usize, dst: usize, n_packets: u64) -> Flow {
-        Flow {
-            src,
-            dst,
-
-            size_byte: n_packets * BYTES_PER_PACKET,
-            cwnd: 1,
-            next_seq: 0,
-        }
-    }
-}
-
-impl Iterator for Flow {
-    type Item = Packet;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.next_seq * BYTES_PER_PACKET < self.size_byte {
-            let p = Packet {
-                src: self.src,
-                dst: self.dst,
-                seq_num: self.next_seq,
-                size_byte: BYTES_PER_PACKET,
-                ttl: 10,
-                sent_ns: 0,
-            };
-            self.next_seq += 1;
-            Some(p)
-        } else {
-            None
-        }
-    }
-}
 
 pub struct Router {
     id: usize,
@@ -82,6 +25,13 @@ pub struct Router {
     // stats
     count: u64,
 }
+
+impl fmt::Display for Router {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Router {}", self.id)
+    }
+}
+
 
 impl Router {
     pub fn new(id: usize) -> Router {
@@ -137,13 +87,11 @@ impl Router {
         return chan;
     }
 
-    /*
-    pub fn connect_incoming(&mut self, other_id: usize) -> mpsc::Sender<Event> {
+    // needs to be called last
+    pub fn connect_world(&mut self) -> Producer<Event> {
+        self.id_to_ix.insert(0, self.next_ix);
+        return self.event_receiver.connect_incoming(0, self.next_ix);
     }
-
-    pub fn connect_outgoing(&mut self, other_id : usize, tx_queue : mpsc::Sender<Event>) {
-    }
-    */
 
     pub fn start(mut self) -> u64 {
         // kickstart stuff up
