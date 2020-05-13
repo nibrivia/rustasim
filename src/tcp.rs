@@ -12,6 +12,7 @@ pub struct Packet {
 
 #[derive(Debug)]
 pub struct Flow {
+    pub flow_id: usize,
     pub src: usize,
     pub dst: usize,
     pub size_byte: u64,
@@ -25,6 +26,7 @@ const BYTES_PER_PACKET: u64 = 1500;
 impl Flow {
     pub fn new(src: usize, dst: usize, n_packets: u64) -> Flow {
         Flow {
+            flow_id: 0, // TODO add flow_id
             src,
             dst,
 
@@ -32,6 +34,12 @@ impl Flow {
             cwnd: 1,
             next_seq: 0,
         }
+    }
+
+    // TODO how to timeout?
+    pub fn dst_receive(&mut self, packet : Packet) {
+        // TODO process arriving packet
+        // TODO send new packets
     }
 }
 

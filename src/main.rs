@@ -101,7 +101,7 @@ impl World {
 fn main() {
     println!("Setup...");
 
-    let world = World::new(14);
+    let world = World::new(4);
 
     println!("Run...");
     let counts = world.start();

@@ -9,6 +9,7 @@ use crate::tcp::*;
 
 #[derive(Debug)]
 pub enum EventType {
+    Flow(Flow),
     Packet(Packet),
     Missing(Vec<usize>),
     Update,

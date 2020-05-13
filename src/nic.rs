@@ -2,6 +2,7 @@ use std::fmt;
 use ringbuf::*;
 use std::collections::HashMap;
 
+use crate::tcp::*;
 use crate::synchronizer::*;
 
 pub struct Router {
@@ -147,6 +148,8 @@ impl Router {
 
                 EventType::Response => {},
 
+                EventType::Flow(flow) => {},
+
                 EventType::Packet(mut packet) => {
                     //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m", self.id+1, event.time, self.id, packet, event.src);
                     self.count += 1;
@@ -184,4 +187,39 @@ impl Router {
         return self.count;
     } // boing...
 } // boing...
-  // splat
+// splat
+
+type ServerID = (usize,);
+
+struct Server {
+    server_id : ServerID,
+    tor_link : Producer<Event>,
+
+    time_ns : u64, // is this needed?
+    flows : HashMap<usize, Flow>,
+}
+
+impl Server {
+    fn new(id : usize, tor_link : Producer<Event>) -> Server {
+        Server {
+            server_id : (id,),
+            tor_link,
+            time_ns : 0,
+            flows : HashMap::new(),
+        }
+    }
+
+    fn receive_event(&mut self, event : Event) {
+        match event.event_type {
+            EventType::Flow(mut flow) => {
+                self.flows.insert(flow.flow_id, flow);
+                // TODO start flow
+            }
+            EventType::Packet(mut packet) => {
+                println!("Received packet {:?}", packet);
+            }
+            _ => unreachable!(),
+        }
+        println!("{:?} go", self.server_id);
+    }
+}
