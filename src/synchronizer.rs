@@ -2,7 +2,8 @@ use std::fmt;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
-use ringbuf::*;
+use crossbeam::queue::spsc;
+//use ringbuf::*;
 
 use crate::tcp::*;
 
@@ -55,7 +56,7 @@ pub struct EventScheduler {
     next_heap: BinaryHeap<Event>, // contains <=one event from each src
     missing_srcs: Vec<usize>,     // which srcs are missing
 
-    event_q: Vec<Consumer<Event>>,
+    event_q: Vec<spsc::Consumer<Event>>,
 
     //safe_time: u64, // last event from each queue
 }
@@ -83,10 +84,10 @@ impl EventScheduler {
         }
     }
 
-    pub fn connect_incoming(&mut self, other_ix: usize) -> Producer<Event> {
+    pub fn connect_incoming(&mut self, other_ix: usize) -> spsc::Producer<Event> {
         // create event queue
-        let q = RingBuffer::new(128);
-        let (prod, cons) = q.split();
+        let (prod, cons) = spsc::new(128);
+        //let (prod, cons) = q.split();
 
         self.event_q.push(cons);
 
@@ -114,10 +115,10 @@ impl Iterator for EventScheduler {
 
                 // refill what we just emptied
                 match self.event_q[event.src].pop() {
-                    None => {
+                    Err(_) => {
                         self.missing_srcs.push(event.src);
                     }
-                    Some(mut new_event) => {
+                    Ok(mut new_event) => {
                         new_event.src = event.src; // update event src now
                         self.next_heap.push(new_event)
                     }
@@ -139,10 +140,10 @@ impl Iterator for EventScheduler {
             for src in self.missing_srcs.iter() {
                 // pop front of queue, if queue empty, keep in missing_srcs
                 match self.event_q[*src].pop() {
-                    None => {
+                    Err(_) => {
                         new_missing.push(*src);
                     }
-                    Some(mut event) => {
+                    Ok(mut event) => {
                         event.src = *src; // update event src now
                         self.next_heap.push(event)
                     }
