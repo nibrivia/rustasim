@@ -62,7 +62,7 @@ impl Router {
     }
 
     pub fn connect(&mut self, other: &mut Self) {
-        let inc_channel = self.event_receiver.connect_incoming(other.id, self.next_ix);
+        let inc_channel = self.event_receiver.connect_incoming(self.next_ix);
 
         self.id_to_ix.insert(other.id, self.next_ix);
 
@@ -82,7 +82,7 @@ impl Router {
         self.out_times.push(0);
         // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
 
-        let chan = self.event_receiver.connect_incoming(other.id, self.next_ix);
+        let chan = self.event_receiver.connect_incoming(self.next_ix);
 
         self.next_ix += 1;
         return chan;
@@ -91,7 +91,7 @@ impl Router {
     // needs to be called last
     pub fn connect_world(&mut self) -> Producer<Event> {
         self.id_to_ix.insert(0, self.next_ix);
-        return self.event_receiver.connect_incoming(0, self.next_ix);
+        return self.event_receiver.connect_incoming(self.next_ix);
     }
 
     pub fn start(mut self) -> u64 {
@@ -160,8 +160,8 @@ impl Router {
                     }
 
                     // who
-                    //let next_hop_ix = self.route[packet.dst];
-                    let next_hop_ix = self.id_to_ix[&packet.dst];
+                    let next_hop_ix = self.route[packet.dst];
+                    //let next_hop_ix = self.id_to_ix[&packet.dst];
 
                     // when
                     let cur_time = std::cmp::max(event.time, self.out_times[next_hop_ix]);

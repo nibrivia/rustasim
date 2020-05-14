@@ -50,7 +50,6 @@ impl Eq for Event {} // don't use function
 
 pub struct EventScheduler {
     id: usize,
-    id_to_ix: HashMap<usize, usize>,
 
     // outgoing events
     next_heap: BinaryHeap<Event>, // contains <=one event from each src
@@ -58,7 +57,7 @@ pub struct EventScheduler {
 
     event_q: Vec<Consumer<Event>>,
 
-    safe_time: u64, // last event from each queue
+    //safe_time: u64, // last event from each queue
 }
 
 impl fmt::Display for EventScheduler {
@@ -73,23 +72,21 @@ impl EventScheduler {
 
         EventScheduler {
             id,
-            id_to_ix: HashMap::new(),
+            //id_to_ix: HashMap::new(),
 
             next_heap,
             missing_srcs: Vec::new(),
 
             event_q: Vec::new(),
 
-            safe_time: 0,
+            //safe_time: 0,
         }
     }
 
-    pub fn connect_incoming(&mut self, other_id: usize, other_ix: usize) -> Producer<Event> {
+    pub fn connect_incoming(&mut self, other_ix: usize) -> Producer<Event> {
         // create event queue
         let q = RingBuffer::new(128);
         let (prod, cons) = q.split();
-
-        self.id_to_ix.insert(other_id, other_ix);
 
         self.event_q.push(cons);
 
@@ -102,32 +99,33 @@ impl EventScheduler {
 impl Iterator for EventScheduler {
     type Item = Event;
 
-    fn next(&mut self) -> Option<Event> {
+    fn next(&mut self) -> Option<Self::Item> {
         // copy self state to local, will update on exit
-        let safe_time = self.safe_time;
+        //let safe_time = self.safe_time;
 
         loop {
             // process events if we've heard form everyone or up till safe time
             if self.missing_srcs.is_empty()
-                || (!self.next_heap.is_empty() && self.next_heap.peek().unwrap().time <= safe_time)
+                //|| (!self.next_heap.is_empty() && self.next_heap.peek().unwrap().time <= safe_time)
             {
                 // get the next event
-                let mut event = self.next_heap.pop().unwrap();
-                let event_src_ix = self.id_to_ix[&event.src];
-                event.src = event_src_ix;
+                let event = self.next_heap.pop().unwrap();
+                //let event_src_ix = event.src;
 
                 // refill what we just emptied
-                match self.event_q[event_src_ix].pop() {
+                match self.event_q[event.src].pop() {
                     None => {
                         self.missing_srcs.push(event.src);
-                        ()
                     }
-                    Some(event) => self.next_heap.push(event),
+                    Some(mut new_event) => {
+                        new_event.src = event.src; // update event src now
+                        self.next_heap.push(new_event)
+                    }
                 }
 
                 // update safe time : this is used if we have multiple event from different sources
                 // we could process, so even if we are missing sources, we can still send those
-                self.safe_time = event.time;
+                //self.safe_time = event.time;
 
                 // done!
                 return Some(event);
@@ -143,9 +141,11 @@ impl Iterator for EventScheduler {
                 match self.event_q[*src].pop() {
                     None => {
                         new_missing.push(*src);
-                        ()
                     }
-                    Some(event) => self.next_heap.push(event),
+                    Some(mut event) => {
+                        event.src = *src; // update event src now
+                        self.next_heap.push(event)
+                    }
                 }
             }
             self.missing_srcs = new_missing;
