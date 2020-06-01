@@ -1,5 +1,6 @@
 use std::thread;
-use ringbuf::*;
+use crossbeam::queue::spsc::*;
+//use ringbuf::*;
 
 pub mod nic;
 pub mod tcp;
@@ -101,7 +102,7 @@ impl World {
 fn main() {
     println!("Setup...");
 
-    let world = World::new(4);
+    let world = World::new(14);
 
     println!("Run...");
     let counts = world.start();
