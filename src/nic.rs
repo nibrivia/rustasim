@@ -1,9 +1,7 @@
 use std::fmt;
-//use ringbuf::*;
 use crossbeam::queue::spsc::*;
 use std::collections::HashMap;
 
-use crate::tcp::*;
 use crate::synchronizer::*;
 
 pub struct Router {
@@ -119,24 +117,39 @@ impl Router {
         }
 
         println!("Router {} starting...", self.id);
+        //let mut time = 0;
+        let mut missing_ts = Vec::new();
+        for _ in &self.out_queues {
+            missing_ts.push(0);
+        }
+
         for event in self.event_receiver {
             match event.event_type {
                 EventType::Close => break,
 
-                // This comes from below
+                // Missing events come from below (we're waiting on a neighbour...)
                 EventType::Missing(dsts) => {
                     // We need the time from these friendos
                     for dst_ix in dsts {
+                        // already asked, let's be patient...
+                        if missing_ts[dst_ix] == event.time {
+                            continue;
+                        }
+                        missing_ts[dst_ix] = event.time;
+
+                        let cur_time = std::cmp::max(event.time, self.out_times[dst_ix]);
                         self.out_queues[dst_ix]
                             .push(Event {
                                 event_type: EventType::Update,
                                 src: self.id,
-                                time: event.time + self.latency_ns,
+                                time: cur_time + self.latency_ns,
                             })
                             .unwrap();
+                        self.out_times[dst_ix] = cur_time + self.latency_ns;
                     }
                 },
 
+                // Update events come from a neighbour who's waiting for us...
                 EventType::Update => {
                     self.out_queues[event.src]
                         .push(Event {
@@ -147,9 +160,10 @@ impl Router {
                         .unwrap();
                 }
 
+                // This is a message from neighbour we were waiting on, it has served its purpose
                 EventType::Response => {},
 
-                EventType::Flow(flow) => {},
+                EventType::Flow(_flow) => {},
 
                 EventType::Packet(mut packet) => {
                     //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m", self.id+1, event.time, self.id, packet, event.src);
@@ -181,15 +195,16 @@ impl Router {
 
                     // do this after we send the event over
                     self.out_times[next_hop_ix] = tx_end;
-                } // boing...
-            } // boing...
-        } // boing...
+                } // end packet
+            } // end match
+        } // end for loop
         println!("Router {} done {}", self.id, self.count);
         return self.count;
-    } // boing...
-} // boing...
-// splat
+    } // end start() function
 
+} // end NIC methods
+
+/*
 type ServerID = (usize,);
 
 struct Server {
@@ -224,3 +239,4 @@ impl Server {
         println!("{:?} go", self.server_id);
     }
 }
+*/

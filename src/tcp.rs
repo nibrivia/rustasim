@@ -41,7 +41,7 @@ impl Flow {
     }
 
     // TODO how to timeout?
-    pub fn dst_receive(&mut self, packet : Packet) {
+    pub fn dst_receive(&mut self, _packet : Packet) {
         // TODO process arriving packet
         // TODO send new packets
     }

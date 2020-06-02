@@ -1,7 +1,7 @@
 use std::fmt;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
-use std::collections::HashMap;
+//use std::collections::HashMap;
 use crossbeam::queue::spsc;
 //use ringbuf::*;
 
@@ -58,7 +58,7 @@ pub struct EventScheduler {
 
     event_q: Vec<spsc::Consumer<Event>>,
 
-    //safe_time: u64, // last event from each queue
+    safe_time: u64, // last event from each queue
 }
 
 impl fmt::Display for EventScheduler {
@@ -80,7 +80,7 @@ impl EventScheduler {
 
             event_q: Vec::new(),
 
-            //safe_time: 0,
+            safe_time: 0,
         }
     }
 
@@ -102,18 +102,18 @@ impl Iterator for EventScheduler {
 
     fn next(&mut self) -> Option<Self::Item> {
         // copy self state to local, will update on exit
-        //let safe_time = self.safe_time;
+        let safe_time = self.safe_time;
 
         loop {
             // process events if we've heard form everyone or up till safe time
             if self.missing_srcs.is_empty()
-                //|| (!self.next_heap.is_empty() && self.next_heap.peek().unwrap().time <= safe_time)
+                || (!self.next_heap.is_empty() && self.next_heap.peek().unwrap().time <= safe_time)
             {
                 // get the next event
                 let event = self.next_heap.pop().unwrap();
                 //let event_src_ix = event.src;
 
-                // refill what we just emptied
+                // attempt to refill what we just emptied
                 match self.event_q[event.src].pop() {
                     Err(_) => {
                         self.missing_srcs.push(event.src);
@@ -149,7 +149,21 @@ impl Iterator for EventScheduler {
                     }
                 }
             }
+
             self.missing_srcs = new_missing;
+
+            // If we're still waiting on sources -> deadlock, trigger update
+            // TODO avoid repeated send
+            if !self.missing_srcs.is_empty() {
+                let event = Event {
+                    event_type : EventType::Missing(self.missing_srcs.to_vec()),
+                    src: 0, // doesn't matter
+                    time: self.safe_time,
+                };
+
+                return Some(event);
+            }
+
         }
     }
 }
