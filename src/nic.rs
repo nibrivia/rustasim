@@ -132,7 +132,7 @@ impl Router {
                             .push(Event {
                                 event_type: EventType::Null,
                                 src: self.id,
-                                time: event.time,
+                                time: event.time + self.latency_ns, // add latency to avoid violating in-order invariant
                             })
                             .unwrap();
                     }
@@ -140,7 +140,7 @@ impl Router {
                     break;
                 },
 
-                // Missing events come from below (we're waiting on a neighbour...)
+                // We're waiting on a neighbour...
                 EventType::Stalled => {
                     // We need the time from these friendos
                     for dst_ix in 0..self.out_times.len() {
@@ -163,7 +163,7 @@ impl Router {
 
                 // This is a message from neighbour we were waiting on, it has served its purpose
                 EventType::Null => {
-                    //println!("@{} Router #{} got response from #{}", event.time, self.id, self.ix_to_id[&event.src]);
+                    //println!("@{} Router #{} got null from #{}", event.time, self.id, self.ix_to_id[&event.src]);
                 },
 
                 EventType::Flow(_flow) => {},
