@@ -12,6 +12,7 @@ pub struct Router {
     ns_per_byte: u64,
 
     id_to_ix: HashMap<usize, usize>,
+    ix_to_id: HashMap<usize, usize>,
     next_ix: usize,
 
     // event management
@@ -37,10 +38,11 @@ impl Router {
     pub fn new(id: usize) -> Router {
         Router {
             id,
-            latency_ns: 10,
+            latency_ns: 100,
             ns_per_byte: 1,
 
             id_to_ix: HashMap::new(),
+            ix_to_id: HashMap::new(),
             next_ix: 0,
 
             event_receiver: EventScheduler::new(id),
@@ -64,6 +66,7 @@ impl Router {
         let inc_channel = self.event_receiver.connect_incoming(self.next_ix);
 
         self.id_to_ix.insert(other.id, self.next_ix);
+        self.ix_to_id.insert(self.next_ix, other.id);
 
         let tx_queue = other._connect(&self, inc_channel);
         self.out_queues.push(tx_queue);
@@ -76,6 +79,7 @@ impl Router {
 
     pub fn _connect(&mut self, other: &Self, tx_queue: Producer<Event>) -> Producer<Event> {
         self.id_to_ix.insert(other.id, self.next_ix);
+        self.ix_to_id.insert(self.next_ix, other.id);
 
         self.out_queues.push(tx_queue);
         self.out_times.push(0);
@@ -98,7 +102,7 @@ impl Router {
         for (dst_ix, out_q) in self.out_queues.iter_mut().enumerate() {
             out_q
                 .push(Event {
-                    event_type: EventType::Update,
+                    event_type: EventType::Response,
                     src: self.id,
                     time: self.latency_ns,
                 })
@@ -116,58 +120,56 @@ impl Router {
             }
         }
 
-        println!("Router {} starting...", self.id);
-        //let mut time = 0;
-        let mut missing_ts = Vec::new();
-        for _ in &self.out_queues {
-            missing_ts.push(0);
-        }
+        println!("Router #{} starting...", self.id);
 
         for event in self.event_receiver {
+            self.count += 1;
             match event.event_type {
-                EventType::Close => break,
-
-                // Missing events come from below (we're waiting on a neighbour...)
-                EventType::Missing(dsts) => {
-                    // We need the time from these friendos
-                    for dst_ix in dsts {
-                        // already asked, let's be patient...
-                        if missing_ts[dst_ix] == event.time {
-                            continue;
-                        }
-                        missing_ts[dst_ix] = event.time;
-
-                        let cur_time = std::cmp::max(event.time, self.out_times[dst_ix]);
+                EventType::Close => {
+                    // ensure everyone ignores us from now until close
+                    for dst_ix in 0..self.out_queues.len() {
                         self.out_queues[dst_ix]
                             .push(Event {
-                                event_type: EventType::Update,
+                                event_type: EventType::Response,
                                 src: self.id,
-                                time: cur_time + self.latency_ns,
+                                time: event.time,
                             })
                             .unwrap();
-                        self.out_times[dst_ix] = cur_time + self.latency_ns;
+                    }
+
+                    break;
+                },
+
+                // Missing events come from below (we're waiting on a neighbour...)
+                EventType::Missing => {
+                    // We need the time from these friendos
+                    for dst_ix in 0..self.out_times.len() {
+                        let out_time = self.out_times[dst_ix];
+                        // equal because they might just need a jog, blocking happens in the
+                        // iterator, so no infinite loop risk
+                        if out_time <= event.time {
+                            self.out_queues[dst_ix]
+                                .push(Event {
+                                    event_type: EventType::Response,
+                                    src: self.id,
+                                    time: event.time + self.latency_ns,
+                                })
+                                .unwrap();
+
+                            self.out_times[dst_ix] = event.time;
+                        }
                     }
                 },
 
-                // Update events come from a neighbour who's waiting for us...
-                EventType::Update => {
-                    self.out_queues[event.src]
-                        .push(Event {
-                            event_type: EventType::Response,
-                            src: self.id,
-                            time: self.out_times[event.src] + self.latency_ns,
-                        })
-                        .unwrap();
-                }
-
                 // This is a message from neighbour we were waiting on, it has served its purpose
-                EventType::Response => {},
+                EventType::Response => {
+                    //println!("@{} Router #{} got response from #{}", event.time, self.id, self.ix_to_id[&event.src]);
+                },
 
                 EventType::Flow(_flow) => {},
 
                 EventType::Packet(mut packet) => {
                     //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m", self.id+1, event.time, self.id, packet, event.src);
-                    self.count += 1;
                     if packet.dst == self.id {
                         // bounce!
                         packet.dst = packet.src;
@@ -198,7 +200,7 @@ impl Router {
                 } // end packet
             } // end match
         } // end for loop
-        println!("Router {} done {}", self.id, self.count);
+        println!("Router #{} done. {} pkts", self.id, self.count);
         return self.count;
     } // end start() function
 

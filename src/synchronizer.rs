@@ -1,4 +1,6 @@
 use std::fmt;
+use std::time;
+use std::thread;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 //use std::collections::HashMap;
@@ -12,8 +14,7 @@ use crate::tcp::*;
 pub enum EventType {
     Flow(Flow),
     Packet(Packet),
-    Missing(Vec<usize>),
-    Update,
+    Missing,
     Response,
     Close,
     //NICEnable { nic: usize },
@@ -59,6 +60,7 @@ pub struct EventScheduler {
     event_q: Vec<spsc::Consumer<Event>>,
 
     safe_time: u64, // last event from each queue
+    req_time: u64, // last event from each queue
 }
 
 impl fmt::Display for EventScheduler {
@@ -81,6 +83,7 @@ impl EventScheduler {
             event_q: Vec::new(),
 
             safe_time: 0,
+            req_time: 0,
         }
     }
 
@@ -129,13 +132,13 @@ impl Iterator for EventScheduler {
                 //self.safe_time = event.time;
 
                 // done!
+                self.safe_time = event.time;
                 return Some(event);
             }
             //println!("{} missing srcs {:?}", self.id, self.missing_srcs);
 
-            // TODO implement "Update" mechanism
-
             // refill our heap with the missing sources
+
             let mut new_missing: Vec<usize> = Vec::new();
             for src in self.missing_srcs.iter() {
                 // pop front of queue, if queue empty, keep in missing_srcs
@@ -153,17 +156,32 @@ impl Iterator for EventScheduler {
             self.missing_srcs = new_missing;
 
             // If we're still waiting on sources -> deadlock, trigger update
-            // TODO avoid repeated send
             if !self.missing_srcs.is_empty() {
-                let event = Event {
-                    event_type : EventType::Missing(self.missing_srcs.to_vec()),
-                    src: 0, // doesn't matter
-                    time: self.safe_time,
-                };
+                if self.req_time < self.safe_time {
+                    let event = Event {
+                        event_type : EventType::Missing,
+                        src: 0, // doesn't matter
+                        time: self.safe_time,
+                    };
 
-                return Some(event);
-            }
-
-        }
-    }
-}
+                    self.req_time = self.safe_time;
+                    return Some(event);
+                } else {
+                    // block here until *someone* has *something*
+                    // TODO non-spin block?
+                    //println!("@{} #{} waiting {:?} ...", self.safe_time, self.id, self.missing_srcs);
+                    let mut empty = true;
+                    while empty {
+                        for src in self.missing_srcs.iter() {
+                            if self.event_q[*src].len() > 0 {
+                                empty = false;
+                                break;
+                            }
+                        }
+                    }
+                    //println!("@{} #{} done...", self.safe_time, self.id);
+                }
+            } // end if
+        } // end loop
+    } // end next()
+} // end Iterator impl
