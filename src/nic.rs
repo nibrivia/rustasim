@@ -102,7 +102,7 @@ impl Router {
         for (dst_ix, out_q) in self.out_queues.iter_mut().enumerate() {
             out_q
                 .push(Event {
-                    event_type: EventType::Response,
+                    event_type: EventType::Null,
                     src: self.id,
                     time: self.latency_ns,
                 })
@@ -130,7 +130,7 @@ impl Router {
                     for dst_ix in 0..self.out_queues.len() {
                         self.out_queues[dst_ix]
                             .push(Event {
-                                event_type: EventType::Response,
+                                event_type: EventType::Null,
                                 src: self.id,
                                 time: event.time,
                             })
@@ -141,7 +141,7 @@ impl Router {
                 },
 
                 // Missing events come from below (we're waiting on a neighbour...)
-                EventType::Missing => {
+                EventType::Stalled => {
                     // We need the time from these friendos
                     for dst_ix in 0..self.out_times.len() {
                         let out_time = self.out_times[dst_ix];
@@ -150,7 +150,7 @@ impl Router {
                         if out_time <= event.time {
                             self.out_queues[dst_ix]
                                 .push(Event {
-                                    event_type: EventType::Response,
+                                    event_type: EventType::Null,
                                     src: self.id,
                                     time: event.time + self.latency_ns,
                                 })
@@ -162,7 +162,7 @@ impl Router {
                 },
 
                 // This is a message from neighbour we were waiting on, it has served its purpose
-                EventType::Response => {
+                EventType::Null => {
                     //println!("@{} Router #{} got response from #{}", event.time, self.id, self.ix_to_id[&event.src]);
                 },
 

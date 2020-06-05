@@ -12,8 +12,8 @@ use crate::synchronizer::*;
 
 // TODO pass in limits as arguments
 //                  s   ms  us  ns
-//const DONE: u64 = 001_000_000_000;
-const DONE: u64 = 000_111_111_000;
+const DONE: u64 = 001_000_000_000;
+//const DONE: u64 = 000_111_111_000;
 
 struct World {
     racks : Vec<Router>,
@@ -35,12 +35,12 @@ impl World {
 
         // flows
         for src in 1..n_racks+1 {
-            for dst in 1..n_racks+1 {
+            for dst in 1..n_racks-1 {
                 // skip self->self
                 if src == dst {
                     continue;
                 }
-                break;
+                //break;
 
                 // create flow
                 let f = Flow::new(src, dst, 40);

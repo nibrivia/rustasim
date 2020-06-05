@@ -1,6 +1,6 @@
 use std::fmt;
-use std::time;
-use std::thread;
+//use std::time;
+//use std::thread;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 //use std::collections::HashMap;
@@ -14,8 +14,8 @@ use crate::tcp::*;
 pub enum EventType {
     Flow(Flow),
     Packet(Packet),
-    Missing,
-    Response,
+    Stalled,
+    Null,
     Close,
     //NICEnable { nic: usize },
 }
@@ -137,7 +137,7 @@ impl Iterator for EventScheduler {
             }
             //println!("{} missing srcs {:?}", self.id, self.missing_srcs);
 
-            // refill our heap with the missing sources
+            // refill our heap with the missing sources, wait a beat for the queues to refill
 
             let mut new_missing: Vec<usize> = Vec::new();
             for src in self.missing_srcs.iter() {
@@ -159,7 +159,7 @@ impl Iterator for EventScheduler {
             if !self.missing_srcs.is_empty() {
                 if self.req_time < self.safe_time {
                     let event = Event {
-                        event_type : EventType::Missing,
+                        event_type : EventType::Stalled,
                         src: 0, // doesn't matter
                         time: self.safe_time,
                     };
@@ -172,6 +172,7 @@ impl Iterator for EventScheduler {
                     //println!("@{} #{} waiting {:?} ...", self.safe_time, self.id, self.missing_srcs);
                     let mut empty = true;
                     while empty {
+                        //thread::sleep(time::Duration::from_nanos(1));
                         for src in self.missing_srcs.iter() {
                             if self.event_q[*src].len() > 0 {
                                 empty = false;
