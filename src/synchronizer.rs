@@ -168,7 +168,7 @@ impl Iterator for EventScheduler {
                         //done = true;
                         //thread::sleep(time::Duration::from_nanos(1));
                         for src in self.missing_srcs.iter() {
-                            if self.event_q[*src].len() >= 0 {
+                            if self.event_q[*src].len() > 0 {
                                 //done = false;
                                 empty = false;
                                 break;
