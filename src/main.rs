@@ -37,7 +37,7 @@ impl World {
 
         // flows
         for src in 1..n_racks+1 {
-            for dst in 1..n_racks-1 {
+            for dst in 1..n_racks+1 {
                 // skip self->self
                 if src == dst {
                     continue;
@@ -122,7 +122,7 @@ fn main() {
     }
     let gbps = ((n_thread*(n_thread-1) * 8) as f64) * (DONE as f64)/1e9 / duration.as_secs_f64();
 
-    println!("{:?} = {}", counts, sum_count);
+    println!("= {}", sum_count);
     println!("{} {} ns/count, {} ns/count/thread", duration.as_secs_f32(), ns_per_count, ns_per_count * n_thread as u128);
     println!("{} gbps", gbps as u64);
 
