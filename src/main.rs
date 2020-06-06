@@ -1,4 +1,6 @@
 use std::thread;
+use std::time::Instant;
+
 use crossbeam::queue::spsc::*;
 //use ringbuf::*;
 
@@ -12,8 +14,8 @@ use crate::synchronizer::*;
 
 // TODO pass in limits as arguments
 //                  s   ms  us  ns
-const DONE: u64 = 001_000_000_000;
-//const DONE: u64 = 000_111_111_000;
+//const DONE: u64 = 001_000_000_000;
+const DONE: u64 = 000_111_111_000;
 
 struct World {
     racks : Vec<Router>,
@@ -104,11 +106,25 @@ impl World {
 fn main() {
     println!("Setup...");
 
-    let world = World::new(14);
+    let n_thread = 7;
+    let world = World::new(n_thread);
 
     println!("Run...");
-    let counts = world.start();
 
-    println!("{:?} = {}", counts, counts.iter().sum::<u64>());
+    let start = Instant::now();
+    let counts = world.start();
+    let duration = start.elapsed();
+
+    let sum_count = counts.iter().sum::<u64>();
+    let mut ns_per_count = 0;
+    if sum_count > 0 {
+        ns_per_count = duration.as_nanos() / sum_count as u128;
+    }
+    let gbps = ((n_thread*(n_thread-1) * 8) as f64) * (DONE as f64)/1e9 / duration.as_secs_f64();
+
+    println!("{:?} = {}", counts, sum_count);
+    println!("{} {} ns/count, {} ns/count/thread", duration.as_secs_f32(), ns_per_count, ns_per_count * n_thread as u128);
+    println!("{} gbps", gbps as u64);
+
     println!("done");
 }

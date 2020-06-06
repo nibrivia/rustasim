@@ -105,55 +105,45 @@ impl Iterator for EventScheduler {
 
     fn next(&mut self) -> Option<Self::Item> {
         // copy self state to local, will update on exit
-        let safe_time = self.safe_time;
+        //let mut safe_time = self.safe_time;
 
         loop {
             // process events if we've heard form everyone or up till safe time
             if self.missing_srcs.is_empty()
-                || (!self.next_heap.is_empty() && self.next_heap.peek().unwrap().time <= safe_time)
+                || (!self.next_heap.is_empty() && self.next_heap.peek().unwrap().time <= self.safe_time)
             {
-                // get the next event
-                let event = self.next_heap.pop().unwrap();
-                //let event_src_ix = event.src;
+                let mut go = true;
+                while go {
+                    // get the next event
+                    let event = self.next_heap.pop().unwrap();
+                    self.safe_time = event.time;
+                    //let event_src_ix = event.src;
 
-                // attempt to refill what we just emptied
-                match self.event_q[event.src].pop() {
-                    Err(_) => {
-                        self.missing_srcs.push(event.src);
+                    // attempt to refill what we just emptied
+                    match self.event_q[event.src].pop() {
+                        Err(_) => {
+                            self.missing_srcs.push(event.src);
+                            go = false;
+                        }
+                        Ok(mut new_event) => {
+                            new_event.src = event.src; // update event src now
+                            self.next_heap.push(new_event)
+                        }
                     }
-                    Ok(mut new_event) => {
-                        new_event.src = event.src; // update event src now
-                        self.next_heap.push(new_event)
+
+                    // loop here while we wait
+                    if let EventType::Null = event.event_type {
+                        //println!("@{} #{} got null, continue", event.time, self.id);
+                        continue;
                     }
+
+                    // done!
+                    return Some(event);
                 }
-
-                // update safe time : this is used if we have multiple event from different sources
-                // we could process, so even if we are missing sources, we can still send those
-                //self.safe_time = event.time;
-
-                // done!
-                self.safe_time = event.time;
-                return Some(event);
             }
-            //println!("{} missing srcs {:?}", self.id, self.missing_srcs);
 
             // refill our heap with the missing sources, wait a beat for the queues to refill
 
-            let mut new_missing: Vec<usize> = Vec::new();
-            for src in self.missing_srcs.iter() {
-                // pop front of queue, if queue empty, keep in missing_srcs
-                match self.event_q[*src].pop() {
-                    Err(_) => {
-                        new_missing.push(*src);
-                    }
-                    Ok(mut event) => {
-                        event.src = *src; // update event src now
-                        self.next_heap.push(event)
-                    }
-                }
-            }
-
-            self.missing_srcs = new_missing;
 
             // If we're still waiting on sources -> deadlock, trigger update
             if !self.missing_srcs.is_empty() {
@@ -170,11 +160,16 @@ impl Iterator for EventScheduler {
                     // block here until *someone* has *something*
                     // TODO non-spin block?
                     //println!("@{} #{} waiting {:?} ...", self.safe_time, self.id, self.missing_srcs);
+
                     let mut empty = true;
                     while empty {
+                    //let mut done = false;
+                    //while !done {
+                        //done = true;
                         //thread::sleep(time::Duration::from_nanos(1));
                         for src in self.missing_srcs.iter() {
-                            if self.event_q[*src].len() > 0 {
+                            if self.event_q[*src].len() >= 0 {
+                                //done = false;
                                 empty = false;
                                 break;
                             }
@@ -183,6 +178,22 @@ impl Iterator for EventScheduler {
                     //println!("@{} #{} done...", self.safe_time, self.id);
                 }
             } // end if
+
+            let mut new_missing: Vec<usize> = Vec::new();
+            for src in self.missing_srcs.iter() {
+                // pop front of queue, if queue empty, keep in missing_srcs
+                match self.event_q[*src].pop() {
+                    Err(_) => {
+                        new_missing.push(*src);
+                    }
+                    Ok(mut event) => {
+                        event.src = *src; // update event src now
+                        self.next_heap.push(event)
+                    }
+                }
+            }
+
+            self.missing_srcs = new_missing;
         } // end loop
     } // end next()
 } // end Iterator impl

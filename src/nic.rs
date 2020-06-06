@@ -123,7 +123,7 @@ impl Router {
         println!("Router #{} starting...", self.id);
 
         for event in self.event_receiver {
-            self.count += 1;
+            //self.count += 1;
             match event.event_type {
                 EventType::Close => {
                     // ensure everyone ignores us from now until close
@@ -169,6 +169,7 @@ impl Router {
                 EventType::Flow(_flow) => {},
 
                 EventType::Packet(mut packet) => {
+                    self.count += 1;
                     //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m", self.id+1, event.time, self.id, packet, event.src);
                     if packet.dst == self.id {
                         // bounce!
@@ -197,7 +198,7 @@ impl Router {
 
                     // do this after we send the event over
                     self.out_times[next_hop_ix] = tx_end;
-                } // end packet
+                } // end EventType::packet
             } // end match
         } // end for loop
         println!("Router #{} done. {} pkts", self.id, self.count);
