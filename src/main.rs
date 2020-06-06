@@ -106,7 +106,7 @@ impl World {
 fn main() {
     println!("Setup...");
 
-    let n_thread = 7;
+    let n_thread = 14;
     let world = World::new(n_thread);
 
     println!("Run...");

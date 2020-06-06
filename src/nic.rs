@@ -132,7 +132,7 @@ impl Router {
                             .push(Event {
                                 event_type: EventType::Close,
                                 src: self.id,
-                                time: event.time + self.latency_ns, /// add latency to avoid violating in-order invariant
+                                time: event.time + self.latency_ns, // add latency to avoid violating in-order invariant
                             })
                             .unwrap();
                     }
