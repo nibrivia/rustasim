@@ -106,7 +106,7 @@ impl World {
 fn main() {
     println!("Setup...");
 
-    let n_thread = 14;
+    let n_thread = 7;
     let world = World::new(n_thread);
 
     println!("Run...");
@@ -124,6 +124,7 @@ fn main() {
 
     println!("= {}", sum_count);
     println!("{} {} ns/count, {} ns/count/thread", duration.as_secs_f32(), ns_per_count, ns_per_count * n_thread as u128);
+    println!("{}M events/s", (sum_count as f32/duration.as_secs_f32()/1e6) as u64);
     println!("{} gbps", gbps as u64);
 
     println!("done");

@@ -129,7 +129,7 @@ impl Iterator for EventScheduler {
                         //let event_src_ix = event.src;
 
                         // attempt to refill what we just emptied
-                        match self.event_q[event.src].pop() {
+                        match self.event_q[event.src].try_pop() {
                             Err(_) => {
                                 self.missing_srcs.push(event.src);
                                 go = false; // we're done :/
@@ -170,10 +170,10 @@ impl Iterator for EventScheduler {
                         // TODO non-spin block?
                         //println!("@{} #{} waiting on #{}",
                         //    self.safe_time, self.id, self.ix_to_id[src]);
-                        while self.event_q[*src].len() == 0 {
-                        }
+                        //while self.event_q[*src].len() == 0 {
+                        //}
 
-                        let mut new_event = self.event_q[*src].pop().unwrap();
+                        let mut new_event = self.event_q[*src].pop();
 
                         new_event.src = *src; // update event src id->ix now
                         // TODO investigate if immediate return is helpful
