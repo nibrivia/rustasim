@@ -1,2 +1,4 @@
 /target
 Session.vim
+*.svg
+perf.*
