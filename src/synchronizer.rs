@@ -49,6 +49,7 @@ impl PartialEq for Event {
 impl Eq for Event {} // don't use function
 
 
+#[derive(Debug)]
 struct Merger {
     // the input queues
     in_queues : Vec<spsc::Consumer<Event>>,
@@ -75,16 +76,16 @@ impl Merger {
         loser_e.push(Event { time : 0, event_type: EventType::Null, src: 0});
 
         // fill with null events
-        for i in 0..in_queues.len() {
+        for i in 1..in_queues.len() {
             loser_q.push(i);
             loser_e.push(Event { time : 0, event_type: EventType::Null, src: i});
         }
 
-        let n_layers = (in_queues.len() as f32).log2().ceil();
+        let n_layers = (in_queues.len() as f32).log2().ceil() as usize;
 
         Merger {
             in_queues,
-            n_layers : 1, // TODO
+            n_layers,
 
             winner_q,
 
@@ -111,19 +112,25 @@ impl Merger {
         // TODO handle when more than one path is empty?
 
         // TODO blocking wait
+        println!("\nPop, previous winner {}", self.winner_q);
         let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
         let mut new_winner_i = self.winner_q;
+        println!("  <- {:?}", new_winner_e);
+        //println!("  {:?}", self);
 
         // TODO change the source now
         // new_winner_e.src = self.winner_q;
 
-        for level in self.n_layers..0 {
+        for level in (0..self.n_layers).rev() {
+            println!("  Layer {}", level);
             // compute index
             let base_offset = 2_usize.pow(level as u32);
-            let index = base_offset + (self.n_layers - level as usize);
+            let index = base_offset + new_winner_i/ 2_usize.pow((self.n_layers - level) as u32);
+            println!("    index: {}", index);
 
             // skip if we're out of bounds
-            if index > self.in_queues.len() {
+            if index >= self.loser_q.len() {
+                println!("    skip!");
                 continue;
             }
 
@@ -133,6 +140,7 @@ impl Merger {
 
             // The current loser wins, swap with our candidate, move up
             if cur_loser_t < new_winner_e.time {
+                println!("    swap!");
                 // swap event
                 mem::swap(&mut new_winner_e, &mut self.loser_e[index]);
 
@@ -147,6 +155,63 @@ impl Merger {
 
         // we have a winner :)
         return new_winner_e;
+    }
+}
+
+#[cfg(test)]
+mod test_merger {
+    use crossbeam::queue::spsc;
+    use crate::synchronizer::*;
+
+    #[test]
+    fn working() {
+        let n_queues = 2;
+        let n_events = 5;
+
+        // Create our event queues
+        let mut prod_qs = Vec::new();
+        let mut cons_qs = Vec::new();
+
+        for _ in 0..n_queues {
+            let (prod, cons) = spsc::new(128);
+            prod_qs.push(prod);
+            cons_qs.push(cons);
+        }
+
+        // Merger
+        let mut merger = Merger::new(cons_qs);
+
+        //prod_qs
+        println!("Pushing events");
+        for (src, prod) in prod_qs.iter().enumerate() {
+            for i in 1..n_events+1 {
+                let e = Event { time: (src*1+i) as u64, src, event_type : EventType::Null };
+                println!("  {} <- {:?}", i, e);
+                prod.push(e).unwrap();
+            }
+
+            // close sentinel
+            let e = Event { time: 100000, src, event_type : EventType::Close };
+            prod.push(e).unwrap();
+        }
+
+        println!("\nPopping events");
+        let mut event_count = 0;
+        let mut cur_time = 0;
+
+        while let Some(event) = merger.try_pop() {
+            println!("    => {:?}", event);
+
+            assert!(cur_time <= event.time);
+            cur_time = event.time;
+            event_count += 1;
+        }
+
+        // n_q -1 starting sentinels, n_q*n_e events, 1 close event
+        let expected_count = (n_queues - 1) + n_queues * n_events + 1;
+
+        assert_eq!(event_count, expected_count);
+        //assert!(false);
     }
 }
 
