@@ -80,9 +80,11 @@ impl Merger {
             loser_e.push(Event { time : 0, event_type: EventType::Null, src: i});
         }
 
+        let n_layers = (in_queues.len() as f32).log2().ceil();
+
         Merger {
             in_queues,
-            n_layers : 1,
+            n_layers : 1, // TODO
 
             winner_q,
 
@@ -119,6 +121,11 @@ impl Merger {
             // compute index
             let base_offset = 2_usize.pow(level as u32);
             let index = base_offset + (self.n_layers - level as usize);
+
+            // skip if we're out of bounds
+            if index > self.in_queues.len() {
+                continue;
+            }
 
             // get current loser
             let cur_loser_i = self.loser_q[index]; // get index of queue
