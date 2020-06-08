@@ -63,6 +63,55 @@ struct Merger {
     loser_e : Vec<Event>,
 }
 
+fn ltr_walk(n_nodes: usize) -> Vec<usize> {
+    let n_layers = (n_nodes as f32).log2().ceil() as usize;
+
+    // visited structure
+    let mut visited : Vec<bool> = Vec::new();
+    for _ in 0..n_nodes+1 {
+        visited.push(false);
+    }
+
+    let mut cur_index = 2_usize.pow((n_layers-1) as u32);
+
+    let mut indices = Vec::new();
+
+    indices.push(cur_index);
+    visited[cur_index] = true;
+    let mut going_up = true;
+
+
+    for _ in 0..n_nodes-1 {
+        if going_up {
+            while visited[cur_index] {
+                cur_index /= 2;
+            }
+        } else {
+            if cur_index * 2 + 1 >= n_nodes {
+                going_up = true;
+                continue;
+            }
+
+            cur_index = cur_index * 2 + 1;
+            while cur_index * 2 < n_nodes {
+                cur_index *= 2;
+            }
+        }
+
+        indices.push(cur_index);
+        visited[cur_index] = true;
+
+        going_up = !going_up;
+    }
+
+    // hacky but w/e
+    if visited[0] {
+        indices.pop();
+    }
+
+    return indices;
+}
+
 impl Merger {
     // Takes all the queues
     fn new(in_queues : Vec<spsc::Consumer<Event>>) -> Merger {
@@ -79,6 +128,12 @@ impl Merger {
         for i in 1..in_queues.len() {
             loser_q.push(i);
             loser_e.push(Event { time : 0, event_type: EventType::Null, src: i});
+        }
+
+        // appropriately set the source
+        for (loser, ix) in ltr_walk(in_queues.len()).iter().enumerate() {
+            loser_q[*ix] = loser+1;
+            loser_e[*ix] = Event { time : 0, event_type: EventType::Null, src: loser+1};
         }
 
         let n_layers = (in_queues.len() as f32).log2().ceil() as usize;
@@ -115,17 +170,31 @@ impl Merger {
         println!("\nPop, previous winner {}", self.winner_q);
         let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
         let mut new_winner_i = self.winner_q;
-        println!("  <- {:?}", new_winner_e);
-        //println!("  {:?}", self);
+        //println!("  <- {:?}", new_winner_e);
+        println!("  {:#?}", self.loser_q);
+        //println!("  {:#?}", self.loser_e);
 
         // TODO change the source now
         // new_winner_e.src = self.winner_q;
 
+        let largest_full_layer = 2_usize.pow((self.in_queues.len() as f32).log2().floor() as u32);
+        let last_layer_max_i = ((self.in_queues.len() + largest_full_layer-1) % largest_full_layer + 1) * 2;
+        println!("  lfl {}", largest_full_layer);
+        println!("  llmi {}", last_layer_max_i);
+
+        let mut winner_for_ix = new_winner_i;
+        if new_winner_i > last_layer_max_i {
+            winner_for_ix = (new_winner_i-(last_layer_max_i+1)/2)*2;
+        }
+        println!("  wfix {}", winner_for_ix);
+
+
         for level in (0..self.n_layers).rev() {
             println!("  Layer {}", level);
+
             // compute index
             let base_offset = 2_usize.pow(level as u32);
-            let index = base_offset + new_winner_i/ 2_usize.pow((self.n_layers - level) as u32);
+            let index = base_offset + winner_for_ix / 2_usize.pow((self.n_layers - level) as u32);
             println!("    index: {}", index);
 
             // skip if we're out of bounds
@@ -146,13 +215,15 @@ impl Merger {
 
                 // swap queue indices
                 self.loser_q[index] = new_winner_i;
-                new_winner_i = cur_loser_i;
+                new_winner_i  = cur_loser_i;
             }
         }
 
         // We need this to know what path to go up next time...
         self.winner_q = new_winner_i;
 
+        println!("  {:#?}", self.loser_q);
+        //println!("  {:#?}", self.loser_e);
         // we have a winner :)
         return new_winner_e;
     }
@@ -164,10 +235,57 @@ mod test_merger {
     use crate::synchronizer::*;
 
     #[test]
-    fn working() {
-        let n_queues = 2;
-        let n_events = 5;
+    fn test_ltr() {
+        let ix = ltr_walk(2);
+        let expected = vec![1];
+        assert_eq!(ix, expected);
 
+        let ix = ltr_walk(3);
+        let expected = vec![2, 1];
+        assert_eq!(ix, expected);
+
+        let ix = ltr_walk(4);
+        let expected = vec![2, 1, 3];
+        assert_eq!(ix, expected);
+
+        let ix = ltr_walk(5);
+        let expected = vec![4, 2, 1, 3];
+        assert_eq!(ix, expected);
+
+        let ix = ltr_walk(13);
+        let expected = vec![8, 4, 9, 2, 10, 5, 11, 1, 12, 6, 3, 7];
+        assert_eq!(ix, expected);
+    }
+
+    #[test]
+    fn test_merge_2() {
+        test_interleave(2, 5);
+    }
+
+    #[test]
+    fn test_merge_4() {
+        test_interleave(4, 10);
+    }
+
+    #[test]
+    fn test_merge_5() {
+        test_interleave(5, 10);
+    }
+
+    #[test]
+    fn test_merge_7() {
+        test_interleave(7, 10);
+    }
+
+    #[test]
+    fn test_merge_many() {
+        for n_queues in 4..20 {
+            println!("{} queues =======================", n_queues);
+            test_interleave(n_queues, 30);
+        }
+    }
+
+    fn test_interleave(n_queues : usize, n_events : usize) {
         // Create our event queues
         let mut prod_qs = Vec::new();
         let mut cons_qs = Vec::new();
@@ -202,7 +320,9 @@ mod test_merger {
         while let Some(event) = merger.try_pop() {
             println!("    => {:?}", event);
 
-            assert!(cur_time <= event.time);
+            assert!(cur_time <= event.time,
+                "Time invariant violated. Previous event was @{}, current event @{}",
+                cur_time, event.time);
             cur_time = event.time;
             event_count += 1;
         }
@@ -210,7 +330,8 @@ mod test_merger {
         // n_q -1 starting sentinels, n_q*n_e events, 1 close event
         let expected_count = (n_queues - 1) + n_queues * n_events + 1;
 
-        assert_eq!(event_count, expected_count);
+        assert_eq!(event_count, expected_count,
+            "Expected {} events, saw {}", expected_count, event_count);
         //assert!(false);
     }
 }
