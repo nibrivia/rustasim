@@ -167,39 +167,31 @@ impl Merger {
         // TODO handle when more than one path is empty?
 
         // TODO blocking wait
-        println!("\nPop, previous winner {}", self.winner_q);
+        while self.in_queues[self.winner_q].len() == 0 {
+        }
         let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
         let mut new_winner_i = self.winner_q;
-        //println!("  <- {:?}", new_winner_e);
-        println!("  {:#?}", self.loser_q);
-        //println!("  {:#?}", self.loser_e);
 
         // TODO change the source now
         // new_winner_e.src = self.winner_q;
 
         let largest_full_layer = 2_usize.pow((self.in_queues.len() as f32).log2().floor() as u32);
         let last_layer_max_i = ((self.in_queues.len() + largest_full_layer-1) % largest_full_layer + 1) * 2;
-        println!("  lfl {}", largest_full_layer);
-        println!("  llmi {}", last_layer_max_i);
 
         let mut winner_for_ix = new_winner_i;
         if new_winner_i > last_layer_max_i {
             winner_for_ix = (new_winner_i-(last_layer_max_i+1)/2)*2;
         }
-        println!("  wfix {}", winner_for_ix);
 
 
         for level in (0..self.n_layers).rev() {
-            println!("  Layer {}", level);
-
             // compute index
+            // TODO pre-compute?
             let base_offset = 2_usize.pow(level as u32);
             let index = base_offset + winner_for_ix / 2_usize.pow((self.n_layers - level) as u32);
-            println!("    index: {}", index);
 
             // skip if we're out of bounds
             if index >= self.loser_q.len() {
-                println!("    skip!");
                 continue;
             }
 
@@ -209,7 +201,6 @@ impl Merger {
 
             // The current loser wins, swap with our candidate, move up
             if cur_loser_t < new_winner_e.time {
-                println!("    swap!");
                 // swap event
                 mem::swap(&mut new_winner_e, &mut self.loser_e[index]);
 
@@ -222,9 +213,6 @@ impl Merger {
         // We need this to know what path to go up next time...
         self.winner_q = new_winner_i;
 
-        println!("  {:#?}", self.loser_q);
-        //println!("  {:#?}", self.loser_e);
-        // we have a winner :)
         return new_winner_e;
     }
 }
@@ -233,6 +221,7 @@ impl Merger {
 mod test_merger {
     use crossbeam::queue::spsc;
     use crate::synchronizer::*;
+    use std::{thread, time};
 
     #[test]
     fn test_ltr() {
@@ -260,21 +249,25 @@ mod test_merger {
     #[test]
     fn test_merge_2() {
         test_interleave(2, 5);
+        test_pushpop(2, 5);
     }
 
     #[test]
     fn test_merge_4() {
         test_interleave(4, 10);
+        test_pushpop(4, 10);
     }
 
     #[test]
     fn test_merge_5() {
         test_interleave(5, 10);
+        test_pushpop(5, 10);
     }
 
     #[test]
     fn test_merge_7() {
         test_interleave(7, 10);
+        test_pushpop(7, 10);
     }
 
     #[test]
@@ -282,6 +275,7 @@ mod test_merger {
         for n_queues in 4..20 {
             println!("{} queues =======================", n_queues);
             test_interleave(n_queues, 30);
+            test_pushpop(n_queues, 30);
         }
     }
 
@@ -332,7 +326,66 @@ mod test_merger {
 
         assert_eq!(event_count, expected_count,
             "Expected {} events, saw {}", expected_count, event_count);
-        //assert!(false);
+    }
+
+    fn test_pushpop(n_queues : usize, n_events : usize) {
+        // Create our event queues
+        let mut prod_qs = Vec::new();
+        let mut cons_qs = Vec::new();
+
+        for _ in 0..n_queues {
+            let (prod, cons) = spsc::new(128);
+            prod_qs.push(prod);
+            cons_qs.push(cons);
+        }
+
+        // Merger
+        let mut merger = Merger::new(cons_qs);
+
+        // checker vars
+
+        println!("Multithreaded pushing and popping events");
+        let handle = thread::spawn(move || {
+            // n_q -1 starting sentinels, n_q*n_e events, 1 close event
+            let expected_count = (n_queues - 1) + n_queues * n_events + 1;
+
+            let mut event_count = 0;
+            let mut cur_time = 0;
+
+            // pop as much as we can
+            for _ in 0..expected_count {
+                let event = merger.pop();
+                //println!("    => {:?}", event);
+
+                assert!(cur_time <= event.time,
+                    "Time invariant violated. Previous event was @{}, current event @{}",
+                    cur_time, event.time);
+                cur_time = event.time;
+                event_count += 1;
+            }
+
+            if let Some(event) = merger.try_pop() {
+                assert!(false, "Merger should not have any more events, got {:?}", event);
+            }
+
+            assert_eq!(event_count, expected_count,
+                "Expected {} events, saw {}", expected_count, event_count);
+        });
+
+        for (src, prod) in prod_qs.iter().enumerate() {
+            for i in 1..n_events+1 {
+                let e = Event { time: (src*1+4*i) as u64, src, event_type : EventType::Null };
+                //println!("  {} <- {:?}", i, e);
+                prod.push(e).unwrap();
+                thread::sleep(time::Duration::from_millis(1));
+            }
+
+            // close sentinel
+            let e = Event { time: 100000, src, event_type : EventType::Close };
+            prod.push(e).unwrap();
+        }
+
+        handle.join().unwrap();
     }
 }
 
