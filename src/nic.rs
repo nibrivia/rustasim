@@ -132,8 +132,8 @@ impl Router {
                             .push(Event {
                                 event_type: EventType::Close,
                                 src: self.id,
-                                time: event.time + self.latency_ns, // add latency to avoid violating in-order invariant
-                            })
+                                time: event.time + self.latency_ns,
+                            }) // add latency to avoid violating in-order invariant
                             .unwrap();
                     }
 
@@ -163,14 +163,17 @@ impl Router {
 
                 // This is a message from neighbour we were waiting on, it has served its purpose
                 EventType::Null => {
-                    //println!("@{} Router #{} got null from #{}", event.time, self.id, self.ix_to_id[&event.src]);
+                    //println!("@{} Router #{} got null from #{}",
+                    //event.time, self.id, self.ix_to_id[&event.src]);
+                    //unreachable!();
                 },
 
                 EventType::Flow(_flow) => {},
 
                 EventType::Packet(mut packet) => {
                     self.count += 1;
-                    //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m", self.id+1, event.time, self.id, packet, event.src);
+                    //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m",
+                    //self.id+1, event.time, self.id, packet, event.src);
                     if packet.dst == self.id {
                         // bounce!
                         packet.dst = packet.src;
@@ -186,14 +189,16 @@ impl Router {
                     let tx_end = cur_time + self.ns_per_byte * packet.size_byte;
                     let rx_end = tx_end + self.latency_ns;
 
-                    //println!("\x1b[0;3{}m@{} Router {} sent {:?} to {}@{}", self.id+1, event.time, self.id, packet, next_hop, rx_end);
+                    //println!("\x1b[0;3{}m@{} Router {} sent {:?} to {}@{}",
+                    //self.id+1, event.time, self.id, packet, next_hop, rx_end);
                     // go
                     if let Err(e) = self.out_queues[next_hop_ix].push(Event {
                         event_type: EventType::Packet(packet),
                         src: self.id,
                         time: rx_end,
                     }) {
-                        println!("@{} Router #{} push error to #{}: {:?}", event.time, self.id, self.ix_to_id[&next_hop_ix], e);
+                        println!("@{} Router #{} push error to #{}: {:?}",
+                            event.time, self.id, self.ix_to_id[&next_hop_ix], e);
                         break;
                     }
 
