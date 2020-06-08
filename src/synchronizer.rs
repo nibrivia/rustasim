@@ -1,4 +1,5 @@
 use std::fmt;
+use std::mem;
 //use std::time;
 //use std::thread;
 use std::cmp::Ordering;
@@ -48,7 +49,99 @@ impl PartialEq for Event {
 impl Eq for Event {} // don't use function
 
 
+struct Merger {
+    // the input queues
+    in_queues : Vec<spsc::Consumer<Event>>,
+    n_layers : usize,
 
+    // the queue to pull from
+    winner_q : usize,
+
+    // the loser queue
+    loser_q : Vec<usize>,
+    loser_e : Vec<Event>,
+}
+
+impl Merger {
+    // Takes all the queues
+    fn new(in_queues : Vec<spsc::Consumer<Event>>) -> Merger {
+
+        let mut loser_q = Vec::new();
+        let mut loser_e = Vec::new();
+        let winner_q = 0;
+
+        // index 0 never gets used
+        loser_q.push(0);
+        loser_e.push(Event { time : 0, event_type: EventType::Null, src: 0});
+
+        // fill with null events
+        for i in 0..in_queues.len() {
+            loser_q.push(i);
+            loser_e.push(Event { time : 0, event_type: EventType::Null, src: i});
+        }
+
+        Merger {
+            in_queues,
+            n_layers : 1,
+
+            winner_q,
+
+            loser_q,
+            loser_e,
+        }
+    }
+
+
+    // May return None if waiting on an input queue
+    fn try_pop(&mut self) -> Option<Event> {
+        if self.in_queues[self.winner_q].len() > 0 {
+            return Some(self.pop());
+        } else {
+            return None;
+        }
+    }
+
+    // blocks until it has something to return
+    fn pop(&mut self) -> Event {
+        // The state of this must be mostly done except for the previous winner
+
+        // TODO handle safe_time
+        // TODO handle when more than one path is empty?
+
+        // TODO blocking wait
+        let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
+        let mut new_winner_i = self.winner_q;
+
+        // TODO change the source now
+        // new_winner_e.src = self.winner_q;
+
+        for level in self.n_layers..0 {
+            // compute index
+            let base_offset = 2_usize.pow(level as u32);
+            let index = base_offset + (self.n_layers - level as usize);
+
+            // get current loser
+            let cur_loser_i = self.loser_q[index]; // get index of queue
+            let cur_loser_t = self.loser_e[index].time;
+
+            // The current loser wins, swap with our candidate, move up
+            if cur_loser_t < new_winner_e.time {
+                // swap event
+                mem::swap(&mut new_winner_e, &mut self.loser_e[index]);
+
+                // swap queue indices
+                self.loser_q[index] = new_winner_i;
+                new_winner_i = cur_loser_i;
+            }
+        }
+
+        // We need this to know what path to go up next time...
+        self.winner_q = new_winner_i;
+
+        // we have a winner :)
+        return new_winner_e;
+    }
+}
 
 pub struct EventScheduler {
     id: usize,
