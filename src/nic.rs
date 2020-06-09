@@ -17,6 +17,7 @@ pub struct Router {
 
     // event management
     event_receiver: EventScheduler,
+    inc_queues: Vec<Consumer<Event>>,
     out_queues: Vec<Producer<Event>>,
     out_times: Vec<u64>,
 
@@ -46,6 +47,7 @@ impl Router {
             next_ix: 0,
 
             event_receiver: EventScheduler::new(id),
+            inc_queues: Vec::new(),
             out_queues: Vec::new(),
             out_times: Vec::new(),
             //out_notify : HashMap::new(),
@@ -98,6 +100,7 @@ impl Router {
     }
 
     pub fn start(mut self) -> u64 {
+        let merger = EventMerger::new(self.event_receiver.get_queues());
         // kickstart stuff up
         for (dst_ix, out_q) in self.out_queues.iter_mut().enumerate() {
             out_q
@@ -122,7 +125,7 @@ impl Router {
 
         println!("Router #{} starting...", self.id);
 
-        for event in self.event_receiver {
+        for event in merger {
             //self.count += 1;
             match event.event_type {
                 EventType::Close => {

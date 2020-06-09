@@ -124,7 +124,8 @@ impl Merger {
         loser_q.push(0);
         loser_e.push(Event { time : 0, event_type: EventType::Null, src: 0});
 
-        // fill with null events
+        // TODO hacky
+        // fill with placeholders
         for i in 1..in_queues.len() {
             loser_q.push(i);
             loser_e.push(Event { time : 0, event_type: EventType::Null, src: i});
@@ -166,14 +167,14 @@ impl Merger {
         // TODO handle safe_time
         // TODO handle when more than one path is empty?
 
-        // TODO blocking wait
+        // blocking wait
         while self.in_queues[self.winner_q].len() == 0 {
         }
         let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
         let mut new_winner_i = self.winner_q;
 
-        // TODO change the source now
-        // new_winner_e.src = self.winner_q;
+        // change the source id->ix now
+        new_winner_e.src = self.winner_q;
 
         let largest_full_layer = 2_usize.pow((self.in_queues.len() as f32).log2().floor() as u32);
         let last_layer_max_i = ((self.in_queues.len() + largest_full_layer-1) % largest_full_layer + 1) * 2;
@@ -389,6 +390,84 @@ mod test_merger {
     }
 }
 
+pub struct EventMerger {
+    merger: Merger,
+    state : SchedulerState,
+    safe_time: u64,
+}
+
+impl EventMerger {
+    pub fn new(in_queues : Vec<spsc::Consumer<Event>>) -> EventMerger {
+        let merger = Merger::new(in_queues);
+
+        EventMerger {
+            merger,
+            state : SchedulerState::Going,
+            safe_time : 0,
+        }
+    }
+}
+
+impl Iterator for EventMerger {
+    type Item = Event;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.state {
+                // process events if we've heard form everyone or up till safe time
+                SchedulerState::Going => {
+                    while let Some(event) = self.merger.try_pop() {
+                        // necessary for stalls, even on null events
+                        self.safe_time = event.time;
+
+                        // Null events are ignored by the user
+                        if let EventType::Null = event.event_type {
+                            continue;
+                        }
+
+                        // return the event
+                        return Some(event);
+                    }
+
+                    self.state = SchedulerState::Stalled;
+                },
+
+                // We're still waiting on sources -> may be deadlock, trigger update
+                SchedulerState::Stalled => {
+                    let event = Event {
+                        event_type : EventType::Stalled,
+                        src: 0, // doesn't matter
+                        time: self.safe_time,
+                    };
+
+                    self.state = SchedulerState::Waiting;
+                    return Some(event);
+                },
+
+                // block here until we can make progress
+                SchedulerState::Waiting => {
+                    // same as state::Going, but blocking
+                    loop {
+                        let event = self.merger.pop();
+
+                        // necessary for stalls, even on null events
+                        self.safe_time = event.time;
+
+                        // Null events are ignored by the user
+                        if let EventType::Null = event.event_type {
+                            continue;
+                        }
+
+                        // return the event
+                        self.state = SchedulerState::Going;
+                        return Some(event);
+                    }
+                }
+            } // end state match
+        } // end loop
+    } // end next()
+} // end Iterator impl
+
 pub struct EventScheduler {
     id: usize,
     ix_to_id: HashMap<usize, usize>,
@@ -447,6 +526,10 @@ impl EventScheduler {
         self.missing_srcs.push(other_ix);
 
         return prod;
+    }
+
+    pub fn get_queues(self) -> Vec<spsc::Consumer<Event>> {
+        return self.event_q;
     }
 }
 
