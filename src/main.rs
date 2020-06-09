@@ -14,7 +14,7 @@ use crate::synchronizer::*;
 
 // TODO pass in limits as arguments
 //                  s   ms  us  ns
-const DONE: u64 = 003_000_000_000;
+const DONE: u64 = 001_000_000_000;
 //const DONE: u64 = 000_111_111_000;
 
 struct World {
@@ -106,7 +106,7 @@ impl World {
 fn main() {
     println!("Setup...");
 
-    let n_thread = 7;
+    let n_thread = 14;
     let world = World::new(n_thread);
 
     println!("Run...");
@@ -124,7 +124,8 @@ fn main() {
 
     println!("= {} / {}s", sum_count, duration.as_secs_f32());
     println!("  {}M count/sec, {}M count/sec/thread",
-        (1e6 / ns_per_count as f64) as u64, (1e6 / (ns_per_count * n_thread as u128) as f64) as u64);
+        (1e6 / ns_per_count as f64) as u64,
+        (1e6 / (ns_per_count * n_thread as u128) as f64) as u64);
     println!("  {} ns/count, {} ns/count/thread",
         ns_per_count /1000, ns_per_count * n_thread as u128 / 1000);
     println!("  {} gbps, {} gbps/thread", gbps as u64, (gbps/n_thread as f64) as u64);

@@ -118,7 +118,6 @@ fn ltr_walk(n_nodes: usize) -> Vec<usize> {
 impl Merger {
     // Takes all the queues
     pub fn new(in_queues : Vec<spsc::Consumer<Event>>) -> Merger {
-
         let mut loser_e = Vec::new();
         let winner_q = 0;
 
@@ -206,30 +205,25 @@ impl Iterator for Merger {
             // TODO handle safe_time
             // TODO handle when more than one path is empty?
 
-            // blocking wait
-            //self.in_queues[self.winner_q].wait();
             if self.in_queues[self.winner_q].len() == 0 {
-                // TODO avoid sending repeated if it's the same time...
                 if !self.stalled {
+                    // TODO avoid sending repeated if it's the same time...
                     // return Stalled event
                     self.stalled = true;
                     return Some(Event { time : self.safe_time, src : 0, event_type: EventType::Stalled });
                 } else {
-                    // we're waiting
-                    while self.in_queues[self.winner_q].len() == 0 {
-                    }
+                    // blocking wait
+                    while self.in_queues[self.winner_q].len() == 0 {}
                     self.stalled = false;
                 }
             }
             let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
-            //let mut new_winner_i = self.winner_q;
 
             // change the source id->ix now
             new_winner_e.src = self.winner_q;
 
             // get the path up
             let mut index = self.paths[self.winner_q];
-            //for index in &self.paths[self.winner_q] {
             while index != 0 {
                 // get current loser
                 let cur_loser_t = self.loser_e[index].time;

@@ -16,4 +16,4 @@ crossbeam = { git = "https://github.com/stjepang/crossbeam.git", rev = "d1736eff
 # crossbeam = { git = "https://github.com/nibrivia/crossbeam.git" , branch = "wait" }
 
 [profile.release]
-debug = false
+debug = true
