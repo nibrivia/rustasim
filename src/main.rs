@@ -127,7 +127,7 @@ fn main() {
         (1e6 / ns_per_count as f64) as u64, (1e6 / (ns_per_count * n_thread as u128) as f64) as u64);
     println!("  {} ns/count, {} ns/count/thread",
         ns_per_count /1000, ns_per_count * n_thread as u128 / 1000);
-    println!("  {} gbps", gbps as u64);
+    println!("  {} gbps, {} gbps/thread", gbps as u64, (gbps/n_thread as f64) as u64);
 
     println!("done");
 }

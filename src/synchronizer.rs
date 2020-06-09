@@ -55,6 +55,8 @@ struct Merger {
     in_queues : Vec<spsc::Consumer<Event>>,
     n_layers : usize,
 
+    paths : Vec<Vec<usize>>,
+
     // the queue to pull from
     winner_q : usize,
 
@@ -137,13 +139,48 @@ impl Merger {
             loser_e[*ix] = Event { time : 0, event_type: EventType::Null, src: loser+1};
         }
 
-        let n_layers = (in_queues.len() as f32).log2().ceil() as usize;
+        // helfpul number
+        let n_queues = in_queues.len();
+        let n_layers = (n_queues as f32).log2().ceil() as usize;
+        let largest_full_layer = 2_usize.pow((n_queues as f32).log2().floor() as u32);
+        let last_layer_max_i = ((n_queues + largest_full_layer-1) % largest_full_layer + 1) * 2;
+        let offset = (last_layer_max_i+1)/2;
+
+        let mut paths = Vec::new();
+        for ix in 0..n_queues {
+            let v_ix;
+            if ix > last_layer_max_i {
+                v_ix = (ix-offset)*2;
+            } else {
+                v_ix = ix;
+            }
+
+            let mut nodes = Vec::new();
+
+            for level in (0..n_layers).rev() {
+                // compute index
+                // TODO pre-compute?
+                let base_offset = 2_usize.pow(level as u32);
+                let index = base_offset + v_ix / 2_usize.pow((n_layers - level) as u32);
+
+                // skip if we're out of bounds
+                if index >= loser_q.len() {
+                    continue;
+                }
+
+                nodes.push(index);
+            }
+
+            paths.push(nodes);
+        };
 
         Merger {
             in_queues,
             n_layers,
 
             winner_q,
+
+            paths,
 
             loser_q,
             loser_e,
@@ -176,38 +213,19 @@ impl Merger {
         // change the source id->ix now
         new_winner_e.src = self.winner_q;
 
-        let largest_full_layer = 2_usize.pow((self.in_queues.len() as f32).log2().floor() as u32);
-        let last_layer_max_i = ((self.in_queues.len() + largest_full_layer-1) % largest_full_layer + 1) * 2;
-
-        let mut winner_for_ix = new_winner_i;
-        if new_winner_i > last_layer_max_i {
-            winner_for_ix = (new_winner_i-(last_layer_max_i+1)/2)*2;
-        }
-
-
-        for level in (0..self.n_layers).rev() {
-            // compute index
-            // TODO pre-compute?
-            let base_offset = 2_usize.pow(level as u32);
-            let index = base_offset + winner_for_ix / 2_usize.pow((self.n_layers - level) as u32);
-
-            // skip if we're out of bounds
-            if index >= self.loser_q.len() {
-                continue;
-            }
+        // get the path up
+        for index in &self.paths[self.winner_q] {
 
             // get current loser
-            let cur_loser_i = self.loser_q[index]; // get index of queue
-            let cur_loser_t = self.loser_e[index].time;
+            let cur_loser_t = self.loser_e[*index].time;
 
             // The current loser wins, swap with our candidate, move up
             if cur_loser_t < new_winner_e.time {
                 // swap event
-                mem::swap(&mut new_winner_e, &mut self.loser_e[index]);
+                mem::swap(&mut new_winner_e, &mut self.loser_e[*index]);
 
                 // swap queue indices
-                self.loser_q[index] = new_winner_i;
-                new_winner_i  = cur_loser_i;
+                mem::swap(&mut new_winner_i, &mut self.loser_q[*index]);
             }
         }
 
@@ -416,9 +434,10 @@ impl Iterator for EventMerger {
             match self.state {
                 // process events if we've heard form everyone or up till safe time
                 SchedulerState::Going => {
+                    let mut safe_time;
                     while let Some(event) = self.merger.try_pop() {
                         // necessary for stalls, even on null events
-                        self.safe_time = event.time;
+                        safe_time = event.time;
 
                         // Null events are ignored by the user
                         if let EventType::Null = event.event_type {
@@ -426,6 +445,7 @@ impl Iterator for EventMerger {
                         }
 
                         // return the event
+                        self.safe_time = safe_time;
                         return Some(event);
                     }
 
@@ -447,11 +467,12 @@ impl Iterator for EventMerger {
                 // block here until we can make progress
                 SchedulerState::Waiting => {
                     // same as state::Going, but blocking
+                    let mut safe_time;
                     loop {
                         let event = self.merger.pop();
 
                         // necessary for stalls, even on null events
-                        self.safe_time = event.time;
+                        safe_time = event.time;
 
                         // Null events are ignored by the user
                         if let EventType::Null = event.event_type {
@@ -460,6 +481,7 @@ impl Iterator for EventMerger {
 
                         // return the event
                         self.state = SchedulerState::Going;
+                        self.safe_time = safe_time;
                         return Some(event);
                     }
                 }

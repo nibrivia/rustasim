@@ -17,7 +17,6 @@ pub struct Router {
 
     // event management
     event_receiver: EventScheduler,
-    inc_queues: Vec<Consumer<Event>>,
     out_queues: Vec<Producer<Event>>,
     out_times: Vec<u64>,
 
@@ -47,7 +46,6 @@ impl Router {
             next_ix: 0,
 
             event_receiver: EventScheduler::new(id),
-            inc_queues: Vec::new(),
             out_queues: Vec::new(),
             out_times: Vec::new(),
             //out_notify : HashMap::new(),
@@ -126,7 +124,7 @@ impl Router {
         println!("Router #{} starting...", self.id);
 
         for event in merger {
-            //self.count += 1;
+            self.count += 1;
             match event.event_type {
                 EventType::Close => {
                     // ensure everyone ignores us from now until close
@@ -174,7 +172,7 @@ impl Router {
                 EventType::Flow(_flow) => {},
 
                 EventType::Packet(mut packet) => {
-                    self.count += 1;
+                    //self.count += 1;
                     //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m",
                     //self.id+1, event.time, self.id, packet, event.src);
                     if packet.dst == self.id {
