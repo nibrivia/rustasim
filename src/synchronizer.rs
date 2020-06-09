@@ -201,31 +201,37 @@ impl Iterator for Merger {
     fn next(&mut self) -> Option<Self::Item> {
         // The state of this must be mostly done except for the previous winner
         loop {
+            // get the path up
+            let mut index = self.paths[self.winner_q];
+            let q = &self.in_queues[self.winner_q];
+
             // TODO handle safe_time
             // TODO handle when more than one path is empty?
 
             // can we make progress?
-            if self.in_queues[self.winner_q].len() == 0 {
-                if !self.stalled {
-                    // TODO avoid sending repeated if it's the same time...
-                    // return Stalled event
-                    self.stalled = true;
-                    return Some(Event { time : self.safe_time, src : 0, event_type: EventType::Stalled });
-                } else {
-                    // blocking wait
-                    while self.in_queues[self.winner_q].len() == 0 {}
-                    self.stalled = false;
+            let mut new_winner_e = match q.pop() {
+                Err(_) => {
+                    if !self.stalled {
+                        // TODO avoid sending repeated if it's the same time...
+                        //while
+                        // return Stalled event
+                        self.stalled = true;
+                        return Some(Event { time : self.safe_time, src : 0, event_type: EventType::Stalled });
+                    } else {
+                        // blocking wait
+                        while q.len() == 0 {}
+                        self.stalled = false;
+                        continue; // start over
+                    }
                 }
-            }
+                Ok(event) => event,
+            };
 
             // get the new candidate
-            let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
+            //let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
 
             // change the source id->ix now
             new_winner_e.src = self.winner_q;
-
-            // get the path up
-            let mut index = self.paths[self.winner_q];
 
             // go up our path, noting the loser as we go
             while index != 0 {
