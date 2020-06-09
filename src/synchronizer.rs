@@ -221,7 +221,8 @@ impl Iterator for Merger {
                         // blocking wait
                         while q.len() == 0 {}
                         self.stalled = false;
-                        continue; // start over
+                        q.pop().unwrap()
+                        //continue; // start over
                     }
                 }
                 Ok(event) => event,
