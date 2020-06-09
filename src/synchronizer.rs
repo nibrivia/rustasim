@@ -61,7 +61,6 @@ struct Merger {
     winner_q : usize,
 
     // the loser queue
-    loser_q : Vec<usize>,
     loser_e : Vec<Event>,
 }
 
@@ -118,24 +117,20 @@ impl Merger {
     // Takes all the queues
     fn new(in_queues : Vec<spsc::Consumer<Event>>) -> Merger {
 
-        let mut loser_q = Vec::new();
         let mut loser_e = Vec::new();
         let winner_q = 0;
 
         // index 0 never gets used
-        loser_q.push(0);
         loser_e.push(Event { time : 0, event_type: EventType::Null, src: 0});
 
         // TODO hacky
         // fill with placeholders
         for i in 1..in_queues.len() {
-            loser_q.push(i);
             loser_e.push(Event { time : 0, event_type: EventType::Null, src: i});
         }
 
         // appropriately set the source
         for (loser, ix) in ltr_walk(in_queues.len()).iter().enumerate() {
-            loser_q[*ix] = loser+1;
             loser_e[*ix] = Event { time : 0, event_type: EventType::Null, src: loser+1};
         }
 
@@ -164,7 +159,7 @@ impl Merger {
                 let index = base_offset + v_ix / 2_usize.pow((n_layers - level) as u32);
 
                 // skip if we're out of bounds
-                if index >= loser_q.len() {
+                if index >= loser_e.len() {
                     continue;
                 }
 
@@ -182,7 +177,6 @@ impl Merger {
 
             paths,
 
-            loser_q,
             loser_e,
         }
     }
@@ -208,7 +202,7 @@ impl Merger {
         while self.in_queues[self.winner_q].len() == 0 {
         }
         let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
-        let mut new_winner_i = self.winner_q;
+        //let mut new_winner_i = self.winner_q;
 
         // change the source id->ix now
         new_winner_e.src = self.winner_q;
@@ -223,14 +217,11 @@ impl Merger {
             if cur_loser_t < new_winner_e.time {
                 // swap event
                 mem::swap(&mut new_winner_e, &mut self.loser_e[*index]);
-
-                // swap queue indices
-                mem::swap(&mut new_winner_i, &mut self.loser_q[*index]);
             }
         }
 
         // We need this to know what path to go up next time...
-        self.winner_q = new_winner_i;
+        self.winner_q = new_winner_e.src;
 
         return new_winner_e;
     }
