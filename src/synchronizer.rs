@@ -211,7 +211,7 @@ impl Merger {
         // get the path up
         let mut index = self.paths[self.winner_q];
         //for index in &self.paths[self.winner_q] {
-        loop {
+        while index != 0 {
             // get current loser
             let cur_loser_t = self.loser_e[index].time;
 
@@ -222,9 +222,6 @@ impl Merger {
             }
 
             index /= 2;
-            if index == 0 {
-                break;
-            }
         }
 
         // We need this to know what path to go up next time...
@@ -288,10 +285,17 @@ mod test_merger {
     }
 
     #[test]
-    fn test_merge_many() {
+    fn test_merge_many_interleave() {
         for n_queues in 3..20 {
             println!("{} queues =======================", n_queues);
             test_interleave(n_queues, n_queues+5);
+        }
+    }
+
+    #[test]
+    fn test_merge_many_threads() {
+        for n_queues in 3..20 {
+            println!("{} queues =======================", n_queues);
             test_pushpop(n_queues, n_queues+5);
         }
     }
@@ -389,12 +393,12 @@ mod test_merger {
                 "Expected {} events, saw {}", expected_count, event_count);
         });
 
-        for (src, prod) in prod_qs.iter().enumerate() {
+        for (src, prod) in prod_qs.iter().enumerate().rev() {
             for i in 1..n_events+1 {
                 let e = Event { time: (src*1+4*i) as u64, src, event_type : EventType::Null };
                 //println!("  {} <- {:?}", i, e);
                 prod.push(e).unwrap();
-                thread::sleep(time::Duration::from_millis(1));
+                thread::sleep(time::Duration::from_micros(1));
             }
 
             // close sentinel
