@@ -217,6 +217,8 @@ impl Iterator for Merger {
                     self.stalled = false;
                 }
             }
+
+            // get the new candidate
             let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
 
             // change the source id->ix now
