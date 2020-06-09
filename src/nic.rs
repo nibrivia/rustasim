@@ -98,7 +98,9 @@ impl Router {
     }
 
     pub fn start(mut self) -> u64 {
+        // TODO very hacky...
         let merger = EventMerger::new(self.event_receiver.get_queues());
+
         // kickstart stuff up
         for (dst_ix, out_q) in self.out_queues.iter_mut().enumerate() {
             out_q

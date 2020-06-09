@@ -14,7 +14,7 @@ use crate::synchronizer::*;
 
 // TODO pass in limits as arguments
 //                  s   ms  us  ns
-const DONE: u64 = 001_000_000_000;
+const DONE: u64 = 003_000_000_000;
 //const DONE: u64 = 000_111_111_000;
 
 struct World {
