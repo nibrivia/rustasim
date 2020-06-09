@@ -199,7 +199,6 @@ impl Merger {
         // TODO handle when more than one path is empty?
 
         // blocking wait
-        //self.in_queues[self.winner_q].wait();
         while self.in_queues[self.winner_q].len() == 0 {
         }
         let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
