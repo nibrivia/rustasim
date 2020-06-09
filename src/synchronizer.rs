@@ -208,7 +208,7 @@ impl Iterator for Merger {
             // TODO handle safe_time
             // TODO handle when more than one path is empty?
 
-            // can we make progress?
+            // get the new candidate
             let mut new_winner_e = match q.pop() {
                 Err(_) => {
                     if !self.stalled {
@@ -226,9 +226,6 @@ impl Iterator for Merger {
                 }
                 Ok(event) => event,
             };
-
-            // get the new candidate
-            //let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
 
             // change the source id->ix now
             new_winner_e.src = self.winner_q;
