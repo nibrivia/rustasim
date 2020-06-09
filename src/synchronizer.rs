@@ -183,6 +183,15 @@ impl Merger {
             loser_e,
         }
     }
+
+    // May return None if waiting on an input queue
+    fn try_pop(&mut self) -> Option<Event> {
+        if self.in_queues[self.winner_q].len() > 0 {
+            return self.next();
+        } else {
+            return None;
+        }
+    }
 }
 
 impl Iterator for Merger {
@@ -195,6 +204,7 @@ impl Iterator for Merger {
             // TODO handle safe_time
             // TODO handle when more than one path is empty?
 
+            // can we make progress?
             if self.in_queues[self.winner_q].len() == 0 {
                 if !self.stalled {
                     // TODO avoid sending repeated if it's the same time...
@@ -216,6 +226,8 @@ impl Iterator for Merger {
 
             // get the path up
             let mut index = self.paths[self.winner_q];
+
+            // go up our path, noting the loser as we go
             while index != 0 {
                 // get current loser
                 let cur_loser_t = self.loser_e[index].time;
@@ -235,6 +247,7 @@ impl Iterator for Merger {
             // We need this to return events even if we don't have new events coming in...
             self.safe_time = new_winner_e.time;
 
+            // Null events are only useful for us
             if let EventType::Null = new_winner_e.event_type {
                 continue;
             }
