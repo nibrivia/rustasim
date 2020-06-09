@@ -99,7 +99,7 @@ impl Router {
 
     pub fn start(mut self) -> u64 {
         // TODO very hacky...
-        let merger = EventMerger::new(self.event_receiver.get_queues());
+        let merger = Merger::new(self.event_receiver.get_queues());
 
         // kickstart stuff up
         for (dst_ix, out_q) in self.out_queues.iter_mut().enumerate() {
@@ -168,7 +168,7 @@ impl Router {
                 EventType::Null => {
                     //println!("@{} Router #{} got null from #{}",
                     //event.time, self.id, self.ix_to_id[&event.src]);
-                    //unreachable!();
+                    unreachable!();
                 },
 
                 EventType::Flow(_flow) => {},

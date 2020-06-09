@@ -50,7 +50,7 @@ impl Eq for Event {} // don't use function
 
 
 #[derive(Debug)]
-struct Merger {
+pub struct Merger {
     // the input queues
     in_queues : Vec<spsc::Consumer<Event>>,
     n_layers : usize,
@@ -59,6 +59,8 @@ struct Merger {
 
     // the queue to pull from
     winner_q : usize,
+    safe_time: u64,
+    stalled : bool,
 
     // the loser queue
     loser_e : Vec<Event>,
@@ -115,7 +117,7 @@ fn ltr_walk(n_nodes: usize) -> Vec<usize> {
 
 impl Merger {
     // Takes all the queues
-    fn new(in_queues : Vec<spsc::Consumer<Event>>) -> Merger {
+    pub fn new(in_queues : Vec<spsc::Consumer<Event>>) -> Merger {
 
         let mut loser_e = Vec::new();
         let winner_q = 0;
@@ -174,6 +176,8 @@ impl Merger {
             n_layers,
 
             winner_q,
+            safe_time : 0,
+            stalled : false,
 
             paths,
 
@@ -185,49 +189,72 @@ impl Merger {
     // May return None if waiting on an input queue
     fn try_pop(&mut self) -> Option<Event> {
         if self.in_queues[self.winner_q].len() > 0 {
-            return Some(self.pop());
+            return self.next();
         } else {
             return None;
         }
     }
+}
+
+impl Iterator for Merger {
+    type Item = Event;
 
     // blocks until it has something to return
-    fn pop(&mut self) -> Event {
+    fn next(&mut self) -> Option<Self::Item> {
         // The state of this must be mostly done except for the previous winner
+        loop {
+            // TODO handle safe_time
+            // TODO handle when more than one path is empty?
 
-        // TODO handle safe_time
-        // TODO handle when more than one path is empty?
+            // blocking wait
+            //self.in_queues[self.winner_q].wait();
+            if self.in_queues[self.winner_q].len() == 0 {
+                // TODO avoid sending repeated if it's the same time...
+                if !self.stalled {
+                    // return Stalled event
+                    self.stalled = true;
+                    return Some(Event { time : self.safe_time, src : 0, event_type: EventType::Stalled });
+                } else {
+                    // we're waiting
+                    while self.in_queues[self.winner_q].len() == 0 {
+                    }
+                    self.stalled = false;
+                }
+            }
+            let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
+            //let mut new_winner_i = self.winner_q;
 
-        // blocking wait
-        //self.in_queues[self.winner_q].wait();
-        while self.in_queues[self.winner_q].len() == 0 {
-        }
-        let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
-        //let mut new_winner_i = self.winner_q;
+            // change the source id->ix now
+            new_winner_e.src = self.winner_q;
 
-        // change the source id->ix now
-        new_winner_e.src = self.winner_q;
+            // get the path up
+            let mut index = self.paths[self.winner_q];
+            //for index in &self.paths[self.winner_q] {
+            while index != 0 {
+                // get current loser
+                let cur_loser_t = self.loser_e[index].time;
 
-        // get the path up
-        let mut index = self.paths[self.winner_q];
-        //for index in &self.paths[self.winner_q] {
-        while index != 0 {
-            // get current loser
-            let cur_loser_t = self.loser_e[index].time;
+                // The current loser wins, swap with our candidate, move up
+                if cur_loser_t < new_winner_e.time {
+                    // swap event
+                    mem::swap(&mut new_winner_e, &mut self.loser_e[index]);
+                }
 
-            // The current loser wins, swap with our candidate, move up
-            if cur_loser_t < new_winner_e.time {
-                // swap event
-                mem::swap(&mut new_winner_e, &mut self.loser_e[index]);
+                index /= 2;
             }
 
-            index /= 2;
+            // We need this to know what path to go up next time...
+            self.winner_q = new_winner_e.src;
+
+            // We need this to return events even if we don't have new events coming in...
+            self.safe_time = new_winner_e.time;
+
+            if let EventType::Null = new_winner_e.event_type {
+                continue;
+            }
+
+            return Some(new_winner_e);
         }
-
-        // We need this to know what path to go up next time...
-        self.winner_q = new_winner_e.src;
-
-        return new_winner_e;
     }
 }
 
@@ -318,7 +345,7 @@ mod test_merger {
         println!("Pushing events");
         for (src, prod) in prod_qs.iter().enumerate() {
             for i in 1..n_events+1 {
-                let e = Event { time: (src*1+i) as u64, src, event_type : EventType::Null };
+                let e = Event { time: (src*1+i) as u64, src, event_type : EventType::Close };
                 println!("  {} <- {:?}", i, e);
                 prod.push(e).unwrap();
             }
@@ -342,8 +369,8 @@ mod test_merger {
             event_count += 1;
         }
 
-        // n_q -1 starting sentinels, n_q*n_e events, 1 close event
-        let expected_count = (n_queues - 1) + n_queues * n_events + 1;
+        // n_q*n_e events, 1 close event
+        let expected_count = n_queues * n_events + 1;
 
         assert_eq!(event_count, expected_count,
             "Expected {} events, saw {}", expected_count, event_count);
@@ -367,16 +394,19 @@ mod test_merger {
 
         println!("Multithreaded pushing and popping events");
         let handle = thread::spawn(move || {
-            // n_q -1 starting sentinels, n_q*n_e events, 1 close event
-            let expected_count = (n_queues - 1) + n_queues * n_events + 1;
+            // n_q*n_e events, 1 close event
+            let expected_count = n_queues * n_events + 1;
 
             let mut event_count = 0;
             let mut cur_time = 0;
 
             // pop as much as we can
-            for _ in 0..expected_count {
-                let event = merger.pop();
+            while event_count < expected_count {
+                let event = merger.next().unwrap();
                 //println!("    => {:?}", event);
+                if let EventType::Stalled = event.event_type {
+                    continue;
+                }
 
                 assert!(cur_time <= event.time,
                     "Time invariant violated. Previous event was @{}, current event @{}",
@@ -395,7 +425,7 @@ mod test_merger {
 
         for (src, prod) in prod_qs.iter().enumerate().rev() {
             for i in 1..n_events+1 {
-                let e = Event { time: (src*1+4*i) as u64, src, event_type : EventType::Null };
+                let e = Event { time: (src*1+4*i) as u64, src, event_type : EventType::Close };
                 //println!("  {} <- {:?}", i, e);
                 prod.push(e).unwrap();
                 thread::sleep(time::Duration::from_micros(1));
@@ -409,88 +439,6 @@ mod test_merger {
         handle.join().unwrap();
     }
 }
-
-pub struct EventMerger {
-    merger: Merger,
-    state : SchedulerState,
-    safe_time: u64,
-}
-
-impl EventMerger {
-    pub fn new(in_queues : Vec<spsc::Consumer<Event>>) -> EventMerger {
-        let merger = Merger::new(in_queues);
-
-        EventMerger {
-            merger,
-            state : SchedulerState::Going,
-            safe_time : 0,
-        }
-    }
-}
-
-impl Iterator for EventMerger {
-    type Item = Event;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.state {
-                // process events if we've heard form everyone or up till safe time
-                SchedulerState::Going => {
-                    let mut safe_time;
-                    while let Some(event) = self.merger.try_pop() {
-                        // necessary for stalls, even on null events
-                        safe_time = event.time;
-
-                        // Null events are ignored by the user
-                        if let EventType::Null = event.event_type {
-                            continue;
-                        }
-
-                        // return the event
-                        self.safe_time = safe_time;
-                        return Some(event);
-                    }
-
-                    self.state = SchedulerState::Stalled;
-                },
-
-                // We're still waiting on sources -> may be deadlock, trigger update
-                SchedulerState::Stalled => {
-                    let event = Event {
-                        event_type : EventType::Stalled,
-                        src: 0, // doesn't matter
-                        time: self.safe_time,
-                    };
-
-                    self.state = SchedulerState::Waiting;
-                    return Some(event);
-                },
-
-                // block here until we can make progress
-                SchedulerState::Waiting => {
-                    // same as state::Going, but blocking
-                    let mut safe_time;
-                    loop {
-                        let event = self.merger.pop();
-
-                        // necessary for stalls, even on null events
-                        safe_time = event.time;
-
-                        // Null events are ignored by the user
-                        if let EventType::Null = event.event_type {
-                            continue;
-                        }
-
-                        // return the event
-                        self.state = SchedulerState::Going;
-                        self.safe_time = safe_time;
-                        return Some(event);
-                    }
-                }
-            } // end state match
-        } // end loop
-    } // end next()
-} // end Iterator impl
 
 pub struct EventScheduler {
     id: usize,
