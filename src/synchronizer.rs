@@ -55,7 +55,7 @@ struct Merger {
     in_queues : Vec<spsc::Consumer<Event>>,
     n_layers : usize,
 
-    paths : Vec<Vec<usize>>,
+    paths : Vec<usize>,
 
     // the queue to pull from
     winner_q : usize,
@@ -150,23 +150,23 @@ impl Merger {
                 v_ix = ix;
             }
 
-            let mut nodes = Vec::new();
+            let mut index = 0;
 
+            assert!(n_layers > 0);
             for level in (0..n_layers).rev() {
                 // compute index
                 // TODO pre-compute?
                 let base_offset = 2_usize.pow(level as u32);
-                let index = base_offset + v_ix / 2_usize.pow((n_layers - level) as u32);
+                index = base_offset + v_ix / 2_usize.pow((n_layers - level) as u32);
 
                 // skip if we're out of bounds
                 if index >= loser_e.len() {
                     continue;
                 }
-
-                nodes.push(index);
+                break;
             }
 
-            paths.push(nodes);
+            paths.push(index);
         };
 
         Merger {
@@ -199,6 +199,7 @@ impl Merger {
         // TODO handle when more than one path is empty?
 
         // blocking wait
+        //self.in_queues[self.winner_q].wait();
         while self.in_queues[self.winner_q].len() == 0 {
         }
         let mut new_winner_e : Event = self.in_queues[self.winner_q].pop().unwrap();
@@ -208,15 +209,21 @@ impl Merger {
         new_winner_e.src = self.winner_q;
 
         // get the path up
-        for index in &self.paths[self.winner_q] {
-
+        let mut index = self.paths[self.winner_q];
+        //for index in &self.paths[self.winner_q] {
+        loop {
             // get current loser
-            let cur_loser_t = self.loser_e[*index].time;
+            let cur_loser_t = self.loser_e[index].time;
 
             // The current loser wins, swap with our candidate, move up
             if cur_loser_t < new_winner_e.time {
                 // swap event
-                mem::swap(&mut new_winner_e, &mut self.loser_e[*index]);
+                mem::swap(&mut new_winner_e, &mut self.loser_e[index]);
+            }
+
+            index /= 2;
+            if index == 0 {
+                break;
             }
         }
 
@@ -282,10 +289,10 @@ mod test_merger {
 
     #[test]
     fn test_merge_many() {
-        for n_queues in 4..20 {
+        for n_queues in 3..20 {
             println!("{} queues =======================", n_queues);
-            test_interleave(n_queues, 30);
-            test_pushpop(n_queues, 30);
+            test_interleave(n_queues, n_queues+5);
+            test_pushpop(n_queues, n_queues+5);
         }
     }
 
