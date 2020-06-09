@@ -183,16 +183,6 @@ impl Merger {
             loser_e,
         }
     }
-
-
-    // May return None if waiting on an input queue
-    fn try_pop(&mut self) -> Option<Event> {
-        if self.in_queues[self.winner_q].len() > 0 {
-            return self.next();
-        } else {
-            return None;
-        }
-    }
 }
 
 impl Iterator for Merger {
