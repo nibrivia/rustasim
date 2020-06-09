@@ -203,7 +203,7 @@ impl Iterator for Merger {
         loop {
             // get the path up
             let mut index = self.paths[self.winner_q];
-            let q = &self.in_queues[self.winner_q];
+            let q = &self.in_queues[self.winner_q]; // avoids regularly indexing into that vec
 
             // TODO handle safe_time
             // TODO handle when more than one path is empty?
