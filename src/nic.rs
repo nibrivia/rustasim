@@ -151,6 +151,7 @@ impl Router {
                         // equal because they might just need a jog, blocking happens in the
                         // iterator, so no infinite loop risk
                         if out_time <= event.time {
+                            //let cur_time = std::cmp::max(event.time, out_time);
                             self.out_queues[dst_ix]
                                 .push(Event {
                                     event_type: EventType::Null,
@@ -158,6 +159,7 @@ impl Router {
                                     time: event.time + self.latency_ns,
                                 })
                                 .unwrap();
+                            //self.count += 1;
 
                             self.out_times[dst_ix] = event.time;
                         }

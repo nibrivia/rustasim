@@ -24,7 +24,7 @@ checksum = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
 [[package]]
 name = "crossbeam"
 version = "0.7.1"
-source = "git+https://github.com/stjepang/crossbeam.git?rev=d1736eff0834302e30bda0d259c920b6d7ed0a58#d1736eff0834302e30bda0d259c920b6d7ed0a58"
+source = "git+https://github.com/nibrivia/crossbeam.git?branch=wait#f5fe121fdd07325d40bea99296f8508d67058b31"
 dependencies = [
  "cfg-if",
  "crossbeam-channel",
@@ -37,7 +37,7 @@ dependencies = [
 [[package]]
 name = "crossbeam-channel"
 version = "0.3.8"
-source = "git+https://github.com/stjepang/crossbeam.git?rev=d1736eff0834302e30bda0d259c920b6d7ed0a58#d1736eff0834302e30bda0d259c920b6d7ed0a58"
+source = "git+https://github.com/nibrivia/crossbeam.git?branch=wait#f5fe121fdd07325d40bea99296f8508d67058b31"
 dependencies = [
  "crossbeam-utils",
  "smallvec",
@@ -46,7 +46,7 @@ dependencies = [
 [[package]]
 name = "crossbeam-deque"
 version = "0.7.1"
-source = "git+https://github.com/stjepang/crossbeam.git?rev=d1736eff0834302e30bda0d259c920b6d7ed0a58#d1736eff0834302e30bda0d259c920b6d7ed0a58"
+source = "git+https://github.com/nibrivia/crossbeam.git?branch=wait#f5fe121fdd07325d40bea99296f8508d67058b31"
 dependencies = [
  "crossbeam-epoch",
  "crossbeam-utils",
@@ -55,7 +55,7 @@ dependencies = [
 [[package]]
 name = "crossbeam-epoch"
 version = "0.7.1"
-source = "git+https://github.com/stjepang/crossbeam.git?rev=d1736eff0834302e30bda0d259c920b6d7ed0a58#d1736eff0834302e30bda0d259c920b6d7ed0a58"
+source = "git+https://github.com/nibrivia/crossbeam.git?branch=wait#f5fe121fdd07325d40bea99296f8508d67058b31"
 dependencies = [
  "arrayvec",
  "cfg-if",
@@ -68,7 +68,7 @@ dependencies = [
 [[package]]
 name = "crossbeam-queue"
 version = "0.1.2"
-source = "git+https://github.com/stjepang/crossbeam.git?rev=d1736eff0834302e30bda0d259c920b6d7ed0a58#d1736eff0834302e30bda0d259c920b6d7ed0a58"
+source = "git+https://github.com/nibrivia/crossbeam.git?branch=wait#f5fe121fdd07325d40bea99296f8508d67058b31"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -76,7 +76,7 @@ dependencies = [
 [[package]]
 name = "crossbeam-utils"
 version = "0.6.5"
-source = "git+https://github.com/stjepang/crossbeam.git?rev=d1736eff0834302e30bda0d259c920b6d7ed0a58#d1736eff0834302e30bda0d259c920b6d7ed0a58"
+source = "git+https://github.com/nibrivia/crossbeam.git?branch=wait#f5fe121fdd07325d40bea99296f8508d67058b31"
 dependencies = [
  "cfg-if",
  "lazy_static",

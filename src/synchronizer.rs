@@ -176,7 +176,7 @@ impl Merger {
 
             winner_q,
             safe_time : 0,
-            stalled : false,
+            stalled: false,
 
             paths,
 
@@ -212,20 +212,21 @@ impl Iterator for Merger {
             let mut new_winner_e = match q.pop() {
                 Err(_) => {
                     if !self.stalled {
-                        // TODO avoid sending repeated if it's the same time...
-                        //while
                         // return Stalled event
                         self.stalled = true;
-                        return Some(Event { time : self.safe_time, src : 0, event_type: EventType::Stalled });
+                        return Some(Event { time : self.safe_time, src : self.winner_q, event_type: EventType::Stalled });
                     } else {
                         // blocking wait
-                        while q.len() == 0 {}
+                        q.wait();
+                        //while q.len() == 0 {}
                         self.stalled = false;
                         q.pop().unwrap()
-                        //continue; // start over
                     }
                 }
-                Ok(event) => event,
+                Ok(event) => {
+                    self.stalled = false;
+                    event
+                }
             };
 
             // change the source id->ix now
