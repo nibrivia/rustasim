@@ -9,10 +9,8 @@ repository = "https://github.com/nibrivia/rustasim"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-radix-heap = "0.3.8"
-ringbuf = "0.2.1"
 # crossbeam = "0.7.3"
-#crossbeam = { git = "https://github.com/stjepang/crossbeam.git", rev = "d1736eff0834302e30bda0d259c920b6d7ed0a58" }
+# crossbeam = { git = "https://github.com/stjepang/crossbeam.git", rev = "d1736eff0834302e30bda0d259c920b6d7ed0a58" }
 crossbeam = { git = "https://github.com/nibrivia/crossbeam.git" , branch = "wait" }
 
 [profile.release]

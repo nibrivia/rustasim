@@ -1,6 +1,7 @@
 use std::fmt;
 use crossbeam::queue::spsc::*;
 use std::collections::HashMap;
+use crossbeam::queue::spsc;
 
 use crate::synchronizer::*;
 
@@ -16,7 +17,8 @@ pub struct Router {
     next_ix: usize,
 
     // event management
-    event_receiver: EventScheduler,
+    //event_receiver: EventScheduler,
+    in_queues : Vec<Consumer<Event>>,
     out_queues: Vec<Producer<Event>>,
     out_times: Vec<u64>,
 
@@ -45,7 +47,8 @@ impl Router {
             ix_to_id: HashMap::new(),
             next_ix: 0,
 
-            event_receiver: EventScheduler::new(id),
+            //event_receiver: EventScheduler::new(id),
+            in_queues : Vec::new(),
             out_queues: Vec::new(),
             out_times: Vec::new(),
             //out_notify : HashMap::new(),
@@ -63,13 +66,14 @@ impl Router {
     }
 
     pub fn connect(&mut self, other: &mut Self) {
-        let inc_channel = self.event_receiver.connect_incoming(self.next_ix, other.id);
+        let (prod, cons) = spsc::new(128);
 
         self.id_to_ix.insert(other.id, self.next_ix);
         self.ix_to_id.insert(self.next_ix, other.id);
 
-        let tx_queue = other._connect(&self, inc_channel);
+        let tx_queue = other._connect(&self, prod);
         self.out_queues.push(tx_queue);
+        self.in_queues.push(cons);
         self.out_times.push(0);
 
         // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
@@ -85,21 +89,25 @@ impl Router {
         self.out_times.push(0);
         // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
 
-        let chan = self.event_receiver.connect_incoming(self.next_ix, other.id);
+        let (prod, cons) = spsc::new(128);
+        self.in_queues.push(cons);
 
         self.next_ix += 1;
-        return chan;
+        return prod;
     }
 
     // needs to be called last
     pub fn connect_world(&mut self) -> Producer<Event> {
         self.id_to_ix.insert(0, self.next_ix);
-        return self.event_receiver.connect_incoming(self.next_ix, 0);
+
+        let (prod, cons) = spsc::new(128);
+        self.in_queues.push(cons);
+        return prod;
     }
 
     pub fn start(mut self) -> u64 {
         // TODO very hacky...
-        let merger = Merger::new(self.event_receiver.get_queues());
+        let merger = Merger::new(self.in_queues);
 
         // kickstart stuff up
         for (dst_ix, out_q) in self.out_queues.iter_mut().enumerate() {
