@@ -179,7 +179,7 @@ impl Merger {
     }
 
     // May return None if waiting on an input queue
-    fn try_pop(&mut self) -> Option<Event> {
+    fn _try_pop(&mut self) -> Option<Event> {
         if self.in_queues[self.winner_q].len() > 0 {
             return self.next();
         } else {
@@ -357,7 +357,7 @@ mod test_merger {
         let mut event_count = 0;
         let mut cur_time = 0;
 
-        while let Some(event) = merger.try_pop() {
+        while let Some(event) = merger._try_pop() {
             println!("    => {:?}", event);
 
             assert!(cur_time <= event.time,
@@ -413,7 +413,7 @@ mod test_merger {
                 event_count += 1;
             }
 
-            if let Some(event) = merger.try_pop() {
+            if let Some(event) = merger._try_pop() {
                 assert!(false, "Merger should not have any more events, got {:?}", event);
             }
 
