@@ -8,12 +8,13 @@ use crossbeam::queue::spsc::*;
 use std::thread;
 
 pub mod engine;
-pub mod nic;
-pub mod tcp;
+pub mod network;
+//pub mod nic;
+//pub mod tcp;
 
 use crate::engine::*;
-use crate::nic::*;
-use crate::tcp::*;
+use crate::network::nic::*;
+use crate::network::tcp::*;
 
 pub struct World {
     /// The actors themselves

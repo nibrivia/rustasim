@@ -20,7 +20,7 @@ use crossbeam::queue::spsc;
 use std::cmp::Ordering;
 use std::mem;
 
-use crate::tcp::*;
+use crate::network::tcp::*;
 
 /// Event types and their associated data.
 ///
