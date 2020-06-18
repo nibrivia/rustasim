@@ -7,12 +7,12 @@
 use crossbeam::queue::spsc::*;
 use std::thread;
 
+pub mod engine;
 pub mod nic;
-pub mod synchronizer;
 pub mod tcp;
 
+use crate::engine::*;
 use crate::nic::*;
-use crate::synchronizer::*;
 use crate::tcp::*;
 
 pub struct World {

@@ -3,7 +3,7 @@ use crossbeam::queue::spsc::*;
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::synchronizer::*;
+use crate::engine::*;
 
 pub struct Router {
     id: usize,

@@ -1,4 +1,4 @@
-//! Returns the next event to be processed
+//! Drives the simulation
 //!
 //! This module implements (almost) all that is needed for a conservative event-driven simulation.
 //!
@@ -347,7 +347,7 @@ impl Iterator for Merger {
 
 #[cfg(test)]
 mod test_merger {
-    use crate::synchronizer::*;
+    use crate::engine::*;
     use crossbeam::queue::spsc;
     use std::{thread, time};
 
