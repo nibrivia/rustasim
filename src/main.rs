@@ -21,10 +21,12 @@ fn main() {
 
     // stats...
     let sum_count = counts.iter().sum::<u64>();
-    let mut ns_per_count = 0;
-    if sum_count > 0 {
-        ns_per_count = 1000 * duration.as_nanos() / sum_count as u128;
-    }
+    let ns_per_count = if sum_count > 0 {
+        1000 * duration.as_nanos() / sum_count as u128
+    } else {
+        0
+    };
+
     let gbps = ((n_thread * (n_thread - 1) * 8) as f64) * (time_limit as f64)
         / 1e9
         / duration.as_secs_f64();
