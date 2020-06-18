@@ -92,7 +92,8 @@ impl Router {
         self.in_queues.push(cons);
 
         self.next_ix += 1;
-        return prod;
+
+        prod
     }
 
     // needs to be called last
@@ -101,7 +102,8 @@ impl Router {
 
         let (prod, cons) = spsc::new(128);
         self.in_queues.push(cons);
-        return prod;
+
+        prod
     }
 
     pub fn start(mut self) -> u64 {
@@ -208,8 +210,9 @@ impl Router {
                 } // end EventType::packet
             } // end match
         } // end for loop
+
         println!("Router #{} done. {} pkts", self.id, self.count);
-        return self.count;
+        self.count
     } // end start() function
 } // end NIC methods
 

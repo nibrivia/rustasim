@@ -108,6 +108,6 @@ impl World {
             counts.push(c);
         }
 
-        return counts;
+        counts
     }
 }

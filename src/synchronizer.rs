@@ -180,7 +180,7 @@ fn ltr_walk(n_nodes: usize) -> Vec<usize> {
         indices.pop();
     }
 
-    return indices;
+    indices
 }
 
 impl Merger {
@@ -267,9 +267,9 @@ impl Merger {
     /// Non-blocking next event. Used for testing.
     fn _try_pop(&mut self) -> Option<Event> {
         if self.in_queues[self.winner_q].len() > 0 {
-            return self.next();
+            self.next()
         } else {
-            return None;
+            None
         }
     }
 }
