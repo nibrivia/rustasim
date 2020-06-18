@@ -224,12 +224,11 @@ impl Merger {
 
         let mut paths = Vec::new();
         for ix in 0..n_queues {
-            let v_ix;
-            if ix > last_layer_max_i {
-                v_ix = (ix - offset) * 2;
+            let v_ix = if ix > last_layer_max_i {
+                (ix - offset) * 2
             } else {
-                v_ix = ix;
-            }
+                ix
+            };
 
             let mut index = 0;
 
@@ -266,7 +265,7 @@ impl Merger {
 
     /// Non-blocking next event. Used for testing.
     fn _try_pop(&mut self) -> Option<Event> {
-        if self.in_queues[self.winner_q].len() > 0 {
+        if !self.in_queues[self.winner_q].is_empty() {
             self.next()
         } else {
             None

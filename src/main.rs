@@ -5,7 +5,7 @@ use rustasim::World;
 fn main() {
     // TODO pass in time_limit, n_threads as arguments
 
-    let time_limit: u64 = 001_000_000_000;
+    let time_limit: u64 = 1_000_000_000;
     //                      s  ms  us  ns
     //let time_limit: u64 = 000_111_111_000;
 
