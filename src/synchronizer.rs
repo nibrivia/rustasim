@@ -1,8 +1,27 @@
+//! Returns the next event to be processed
+//!
+//! This module implements (almost) all that is needed for a conservative event-driven simulation.
+//!
+//! The main ideas behind a conservative scheduling approach is to return all events to the actor
+//! in a monotonically increasing fashion. In order to do this without risking later on returning
+//! an event that would break causality, we need to wait to hear from all our neighbours. This
+//! sometimes causes a deadlock when two (or more) neighbours are waiting on each other.
+//!
+//! In order to resolve the deadlock, one can send "null-messages". Essentially telling neighbours
+//! that we have nothing to do. Fundamentally this is an actor-level action: there is no way the
+//! simulation engine knows enough about the simulation model to know which neighbours have to hear
+//! from us, or how long in the future it is safe for them to advance. Therefore the engine returns
+//! a "Stalled" event type at which point the actor *must* update all relevant neighbours in order
+//! for the simulation to progress.
+//!
+// TODO description of when the null-message should be sent and what it should look like
+
 use std::mem;
 use std::cmp::Ordering;
 use crossbeam::queue::spsc;
 
 use crate::tcp::*;
+
 
 /// Event types and their associated data.
 ///
