@@ -19,7 +19,7 @@ pub struct World {
     racks: Vec<Router>,
 
     /// Communication channels from us (the world) to the actors
-    chans: Vec<Producer<Event>>,
+    chans: Vec<Producer<Event<ModelEvent>>>,
 }
 
 /// Main simulation object.
@@ -60,7 +60,7 @@ impl World {
                     packets.push(Event {
                         src: dst,
                         time: 0,
-                        event_type: EventType::Packet(packet),
+                        event_type: EventType::ModelEvent(ModelEvent::Packet(packet)),
                     });
                 }
                 let dst_rack = racks.get_mut(dst - 1).unwrap();

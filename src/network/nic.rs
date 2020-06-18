@@ -4,6 +4,12 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::engine::*;
+use crate::network::tcp::*;
+
+pub enum ModelEvent {
+    Flow(Flow),
+    Packet(Packet),
+}
 
 pub struct Router {
     id: usize,
@@ -18,8 +24,8 @@ pub struct Router {
 
     // event management
     //event_receiver: EventScheduler,
-    in_queues: Vec<Consumer<Event>>,
-    out_queues: Vec<Producer<Event>>,
+    in_queues: Vec<Consumer<Event<ModelEvent>>>,
+    out_queues: Vec<Producer<Event<ModelEvent>>>,
     out_times: Vec<u64>,
 
     // networking things
@@ -57,7 +63,7 @@ impl Router {
         }
     }
 
-    pub fn init_queue(&mut self, dst: usize, events: Vec<Event>) {
+    pub fn init_queue(&mut self, dst: usize, events: Vec<Event<ModelEvent>>) {
         let dst_ix = self.id_to_ix[&dst];
         for e in events {
             self.out_queues[dst_ix].push(e).unwrap();
@@ -80,7 +86,11 @@ impl Router {
         self.next_ix += 1;
     }
 
-    pub fn _connect(&mut self, other: &Self, tx_queue: Producer<Event>) -> Producer<Event> {
+    pub fn _connect(
+        &mut self,
+        other: &Self,
+        tx_queue: Producer<Event<ModelEvent>>,
+    ) -> Producer<Event<ModelEvent>> {
         self.id_to_ix.insert(other.id, self.next_ix);
         self.ix_to_id.insert(self.next_ix, other.id);
 
@@ -97,7 +107,7 @@ impl Router {
     }
 
     // needs to be called last
-    pub fn connect_world(&mut self) -> Producer<Event> {
+    pub fn connect_world(&mut self) -> Producer<Event<ModelEvent>> {
         self.id_to_ix.insert(0, self.next_ix);
 
         let (prod, cons) = spsc::new(128);
@@ -107,7 +117,7 @@ impl Router {
     }
 
     pub fn start(mut self) -> u64 {
-        let merger = Merger::new(self.in_queues);
+        let merger = Merger::<ModelEvent>::new(self.in_queues);
 
         // TODO auto route
         // route is an id->ix structure
@@ -169,45 +179,49 @@ impl Router {
                     unreachable!();
                 }
 
-                EventType::Flow(_flow) => {}
+                EventType::ModelEvent(model_event) => {
+                    match model_event {
+                        ModelEvent::Flow(_flow) => {}
 
-                EventType::Packet(mut packet) => {
-                    //self.count += 1;
-                    //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m",
-                    //self.id+1, event.time, self.id, packet, event.src);
-                    if packet.dst == self.id {
-                        // bounce!
-                        packet.dst = packet.src;
-                        packet.src = self.id;
+                        ModelEvent::Packet(mut packet) => {
+                            //self.count += 1;
+                            //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m",
+                            //self.id+1, event.time, self.id, packet, event.src);
+                            if packet.dst == self.id {
+                                // bounce!
+                                packet.dst = packet.src;
+                                packet.src = self.id;
+                            }
+
+                            // who
+                            let next_hop_ix = self.route[packet.dst];
+                            //let next_hop_ix = self.id_to_ix[&packet.dst];
+
+                            // when
+                            let cur_time = std::cmp::max(event.time, self.out_times[next_hop_ix]);
+                            let tx_end = cur_time + self.ns_per_byte * packet.size_byte;
+                            let rx_end = tx_end + self.latency_ns;
+
+                            //println!("\x1b[0;3{}m@{} Router {} sent {:?} to {}@{}",
+                            //self.id+1, event.time, self.id, packet, next_hop, rx_end);
+                            // go
+                            if let Err(e) = self.out_queues[next_hop_ix].push(Event {
+                                event_type: EventType::ModelEvent(ModelEvent::Packet(packet)),
+                                src: self.id,
+                                time: rx_end,
+                            }) {
+                                println!(
+                                    "@{} Router #{} push error to #{}: {:?}",
+                                    event.time, self.id, self.ix_to_id[&next_hop_ix], e
+                                );
+                                break;
+                            }
+
+                            // do this after we send the event over
+                            self.out_times[next_hop_ix] = tx_end;
+                        } // end EventType::packet
                     }
-
-                    // who
-                    let next_hop_ix = self.route[packet.dst];
-                    //let next_hop_ix = self.id_to_ix[&packet.dst];
-
-                    // when
-                    let cur_time = std::cmp::max(event.time, self.out_times[next_hop_ix]);
-                    let tx_end = cur_time + self.ns_per_byte * packet.size_byte;
-                    let rx_end = tx_end + self.latency_ns;
-
-                    //println!("\x1b[0;3{}m@{} Router {} sent {:?} to {}@{}",
-                    //self.id+1, event.time, self.id, packet, next_hop, rx_end);
-                    // go
-                    if let Err(e) = self.out_queues[next_hop_ix].push(Event {
-                        event_type: EventType::Packet(packet),
-                        src: self.id,
-                        time: rx_end,
-                    }) {
-                        println!(
-                            "@{} Router #{} push error to #{}: {:?}",
-                            event.time, self.id, self.ix_to_id[&next_hop_ix], e
-                        );
-                        break;
-                    }
-
-                    // do this after we send the event over
-                    self.out_times[next_hop_ix] = tx_end;
-                } // end EventType::packet
+                }
             } // end match
         } // end for loop
 

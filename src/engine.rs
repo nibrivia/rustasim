@@ -20,8 +20,6 @@ use crossbeam::queue::spsc;
 use std::cmp::Ordering;
 use std::mem;
 
-use crate::network::tcp::*;
-
 /// Event types and their associated data.
 ///
 /// There currently is a little bit of a mix of abstractions here. Most event types should be
@@ -36,10 +34,9 @@ use crate::network::tcp::*;
 ///
 /// The `Close` event type is sufficiently universal that it will presumably also stay here.
 #[derive(Debug)]
-pub enum EventType {
-    Flow(Flow),
-
-    Packet(Packet),
+pub enum EventType<U> {
+    /// User event,
+    ModelEvent(U),
 
     /// The simulation is stalled, the actor must update its neighbours with null-events
     Stalled,
@@ -67,39 +64,39 @@ pub enum EventType {
 ///
 /// Events are ordered by their time.
 #[derive(Debug)]
-pub struct Event {
+pub struct Event<U> {
     pub time: u64,
     pub src: usize,
-    pub event_type: EventType,
+    pub event_type: EventType<U>,
 }
 
-impl Ord for Event {
+impl<U> Ord for Event<U> {
     fn cmp(&self, other: &Self) -> Ordering {
         other.time.cmp(&self.time)
     }
 }
 
-impl PartialOrd for Event {
+impl<U> PartialOrd for Event<U> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl PartialEq for Event {
+impl<U> PartialEq for Event<U> {
     fn eq(&self, other: &Self) -> bool {
         self.time == other.time
     }
 }
-impl Eq for Event {}
+impl<U> Eq for Event<U> {}
 
 /// Manages the input queues and returns the next [`Event`](struct.Event.html) to be processed.
 ///
 /// The events returned by `Merger` are monotonically increasing and come from either neighbours,
 /// or from the Merger itself upon a potential Stall.
 #[derive(Debug)]
-pub struct Merger {
+pub struct Merger<U> {
     // the input queues
-    in_queues: Vec<spsc::Consumer<Event>>,
+    in_queues: Vec<spsc::Consumer<Event<U>>>,
     n_layers: usize,
 
     paths: Vec<usize>,
@@ -110,7 +107,7 @@ pub struct Merger {
     stalled: bool,
 
     // the loser queue
-    loser_e: Vec<Event>,
+    loser_e: Vec<Event<U>>,
 }
 
 /// Returns indices into an 1-indexed array a tree with `n_nodes` leaves from left-to-right.
@@ -183,9 +180,9 @@ fn ltr_walk(n_nodes: usize) -> Vec<usize> {
     indices
 }
 
-impl Merger {
+impl<U> Merger<U> {
     /// Builds a new merger from a set of input queues
-    pub fn new(in_queues: Vec<spsc::Consumer<Event>>) -> Merger {
+    pub fn new(in_queues: Vec<spsc::Consumer<Event<U>>>) -> Merger<U> {
         let mut loser_e = Vec::new();
         let winner_q = 0;
 
@@ -264,7 +261,7 @@ impl Merger {
     }
 
     /// Non-blocking next event. Used for testing.
-    fn _try_pop(&mut self) -> Option<Event> {
+    fn _try_pop(&mut self) -> Option<Event<U>> {
         if !self.in_queues[self.winner_q].is_empty() {
             self.next()
         } else {
@@ -273,8 +270,8 @@ impl Merger {
     }
 }
 
-impl Iterator for Merger {
-    type Item = Event;
+impl<U> Iterator for Merger<U> {
+    type Item = Event<U>;
 
     // blocks until it has something to return
     fn next(&mut self) -> Option<Self::Item> {
@@ -351,6 +348,11 @@ mod test_merger {
     use crossbeam::queue::spsc;
     use std::{thread, time};
 
+    #[derive(Debug)]
+    enum EmptyModel {
+        None,
+    }
+
     #[test]
     fn test_ltr() {
         let ix = ltr_walk(2);
@@ -426,7 +428,7 @@ mod test_merger {
         }
 
         // Merger
-        let mut merger = Merger::new(cons_qs);
+        let mut merger = Merger::<EmptyModel>::new(cons_qs);
 
         //prod_qs
         println!("Pushing events");
@@ -435,7 +437,7 @@ mod test_merger {
                 let e = Event {
                     time: (src * 1 + i) as u64,
                     src,
-                    event_type: EventType::Close,
+                    event_type: EventType::ModelEvent(EmptyModel::None),
                 };
                 println!("  {} <- {:?}", i, e);
                 prod.push(e).unwrap();
@@ -489,7 +491,7 @@ mod test_merger {
         }
 
         // Merger
-        let mut merger = Merger::new(cons_qs);
+        let mut merger = Merger::<EmptyModel>::new(cons_qs);
 
         // checker vars
 
@@ -539,7 +541,7 @@ mod test_merger {
                 let e = Event {
                     time: (src * 1 + 4 * i) as u64,
                     src,
-                    event_type: EventType::Close,
+                    event_type: EventType::ModelEvent(EmptyModel::None),
                 };
                 //println!("  {} <- {:?}", i, e);
                 prod.push(e).unwrap();
