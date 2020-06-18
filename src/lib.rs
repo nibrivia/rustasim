@@ -13,13 +13,15 @@ pub mod network;
 use crate::engine::*;
 use crate::network::nic::*;
 use crate::network::tcp::*;
+use crate::network::ModelEvent;
+use crate::network::NetworkEvent;
 
 pub struct World {
     /// The actors themselves
     racks: Vec<Router>,
 
     /// Communication channels from us (the world) to the actors
-    chans: Vec<Producer<Event<ModelEvent>>>,
+    chans: Vec<Producer<ModelEvent>>,
 }
 
 /// Main simulation object.
@@ -33,11 +35,13 @@ impl World {
     /// Sets up a world ready for simulation
     pub fn new(n_racks: usize) -> World {
         // Create the racks and connect them all up
-        let mut racks = Vec::new();
+        let mut racks: Vec<Router> = Vec::new();
+
         for id in 1..n_racks + 1 {
             let mut r = Router::new(id);
             for id2 in 1..id {
-                r.connect(racks.get_mut(id2 - 1).unwrap());
+                let rack2 = racks.get_mut(id2 - 1).unwrap();
+                r.connect(Box::new(*rack2));
             }
             racks.push(r);
         }
@@ -60,7 +64,7 @@ impl World {
                     packets.push(Event {
                         src: dst,
                         time: 0,
-                        event_type: EventType::ModelEvent(ModelEvent::Packet(packet)),
+                        event_type: EventType::ModelEvent(NetworkEvent::Packet(packet)),
                     });
                 }
                 let dst_rack = racks.get_mut(dst - 1).unwrap();

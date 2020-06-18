@@ -1,16 +1,34 @@
+//! Deals with most of the IP-layerish things: routing, matching packets to flows...
+
 use crossbeam::queue::spsc;
 use crossbeam::queue::spsc::*;
 use std::collections::HashMap;
 use std::fmt;
 
 use crate::engine::*;
-use crate::network::tcp::*;
+use crate::network::tcp;
+use crate::network::ModelEvent;
+use crate::network::NetworkEvent;
 
-pub enum ModelEvent {
-    Flow(Flow),
-    Packet(Packet),
+pub trait Connectable {
+    fn id(&self) -> usize;
+
+    fn connect(&mut self, other: Box<dyn Connectable>);
+    fn back_connect(
+        &mut self,
+        other: Box<dyn Connectable>,
+        tx_queue: Producer<ModelEvent>,
+    ) -> Producer<ModelEvent>;
 }
 
+/// Top of rack switch
+///
+/// Connects down to a certain number of servers and out to backbone switches. It is important that
+/// the up- and down- bandwidth be matched lest there be excessive queues.
+///
+/// For performance reasons, it is beneficial to not use hash tables in critical-path data
+/// structures. This means that each `Router` has a mapping of other Router IDs to an index. `Event`s
+/// coming out of the `Merger` already have their `src` field converted to the right index for us.
 pub struct Router {
     id: usize,
 
@@ -24,8 +42,8 @@ pub struct Router {
 
     // event management
     //event_receiver: EventScheduler,
-    in_queues: Vec<Consumer<Event<ModelEvent>>>,
-    out_queues: Vec<Producer<Event<ModelEvent>>>,
+    in_queues: Vec<Consumer<ModelEvent>>,
+    out_queues: Vec<Producer<ModelEvent>>,
     out_times: Vec<u64>,
 
     // networking things
@@ -38,6 +56,48 @@ pub struct Router {
 impl fmt::Display for Router {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Router {}", self.id)
+    }
+}
+
+impl Connectable for Router {
+    fn id(&self) -> usize {
+        self.id
+    }
+
+    fn connect(&mut self, mut other: Box<dyn Connectable>) {
+        let (prod, cons) = spsc::new(128);
+
+        self.id_to_ix.insert(other.id(), self.next_ix);
+        self.ix_to_id.insert(self.next_ix, other.id());
+
+        let tx_queue = other.back_connect(Box::new(*self), prod);
+        self.out_queues.push(tx_queue);
+        self.in_queues.push(cons);
+        self.out_times.push(0);
+
+        // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
+
+        self.next_ix += 1;
+    }
+
+    fn back_connect(
+        &mut self,
+        other: Box<dyn Connectable>,
+        tx_queue: Producer<ModelEvent>,
+    ) -> Producer<ModelEvent> {
+        self.id_to_ix.insert(other.id(), self.next_ix);
+        self.ix_to_id.insert(self.next_ix, other.id());
+
+        self.out_queues.push(tx_queue);
+        self.out_times.push(0);
+        // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
+
+        let (prod, cons) = spsc::new(128);
+        self.in_queues.push(cons);
+
+        self.next_ix += 1;
+
+        prod
     }
 }
 
@@ -63,51 +123,15 @@ impl Router {
         }
     }
 
-    pub fn init_queue(&mut self, dst: usize, events: Vec<Event<ModelEvent>>) {
+    pub fn init_queue(&mut self, dst: usize, events: Vec<ModelEvent>) {
         let dst_ix = self.id_to_ix[&dst];
         for e in events {
             self.out_queues[dst_ix].push(e).unwrap();
         }
     }
 
-    pub fn connect(&mut self, other: &mut Self) {
-        let (prod, cons) = spsc::new(128);
-
-        self.id_to_ix.insert(other.id, self.next_ix);
-        self.ix_to_id.insert(self.next_ix, other.id);
-
-        let tx_queue = other._connect(&self, prod);
-        self.out_queues.push(tx_queue);
-        self.in_queues.push(cons);
-        self.out_times.push(0);
-
-        // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
-
-        self.next_ix += 1;
-    }
-
-    pub fn _connect(
-        &mut self,
-        other: &Self,
-        tx_queue: Producer<Event<ModelEvent>>,
-    ) -> Producer<Event<ModelEvent>> {
-        self.id_to_ix.insert(other.id, self.next_ix);
-        self.ix_to_id.insert(self.next_ix, other.id);
-
-        self.out_queues.push(tx_queue);
-        self.out_times.push(0);
-        // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
-
-        let (prod, cons) = spsc::new(128);
-        self.in_queues.push(cons);
-
-        self.next_ix += 1;
-
-        prod
-    }
-
     // needs to be called last
-    pub fn connect_world(&mut self) -> Producer<Event<ModelEvent>> {
+    pub fn connect_world(&mut self) -> Producer<ModelEvent> {
         self.id_to_ix.insert(0, self.next_ix);
 
         let (prod, cons) = spsc::new(128);
@@ -117,7 +141,7 @@ impl Router {
     }
 
     pub fn start(mut self) -> u64 {
-        let merger = Merger::<ModelEvent>::new(self.in_queues);
+        let merger = Merger::new(self.in_queues);
 
         // TODO auto route
         // route is an id->ix structure
@@ -181,9 +205,9 @@ impl Router {
 
                 EventType::ModelEvent(model_event) => {
                     match model_event {
-                        ModelEvent::Flow(_flow) => {}
+                        NetworkEvent::Flow(_flow) => {}
 
-                        ModelEvent::Packet(mut packet) => {
+                        NetworkEvent::Packet(mut packet) => {
                             //self.count += 1;
                             //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m",
                             //self.id+1, event.time, self.id, packet, event.src);
@@ -206,7 +230,7 @@ impl Router {
                             //self.id+1, event.time, self.id, packet, next_hop, rx_end);
                             // go
                             if let Err(e) = self.out_queues[next_hop_ix].push(Event {
-                                event_type: EventType::ModelEvent(ModelEvent::Packet(packet)),
+                                event_type: EventType::ModelEvent(NetworkEvent::Packet(packet)),
                                 src: self.id,
                                 time: rx_end,
                             }) {
@@ -230,28 +254,34 @@ impl Router {
     } // end start() function
 } // end NIC methods
 
-/*
-type ServerID = (usize,);
-
 struct Server {
-    server_id : ServerID,
-    tor_link : Producer<Event>,
+    server_id: usize,
 
-    time_ns : u64, // is this needed?
-    flows : HashMap<usize, Flow>,
+    tor_link: Producer<ModelEvent>,
+    world_link: Producer<ModelEvent>,
+    //self_link: Producer<Event<ModelEvent>>,
+    flows: HashMap<usize, tcp::Flow>,
 }
 
 impl Server {
-    fn new(id : usize, tor_link : Producer<Event>) -> Server {
+    fn _new(
+        server_id: usize,
+        tor_link: Producer<ModelEvent>,
+        world_link: Producer<ModelEvent>,
+    ) -> Server {
+        //let (self_link
         Server {
-            server_id : (id,),
+            server_id,
+
             tor_link,
-            time_ns : 0,
-            flows : HashMap::new(),
+            world_link,
+            //self_link,
+            flows: HashMap::new(),
         }
     }
 
-    fn receive_event(&mut self, event : Event) {
+    fn _receive_event(&mut self, _event: Event<ModelEvent>) {
+        /*
         match event.event_type {
             EventType::Flow(mut flow) => {
                 self.flows.insert(flow.flow_id, flow);
@@ -263,6 +293,6 @@ impl Server {
             _ => unreachable!(),
         }
         println!("{:?} go", self.server_id);
+        */
     }
 }
-*/

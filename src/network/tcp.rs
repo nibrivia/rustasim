@@ -1,5 +1,8 @@
 //! Implements a basic version of TCP
 
+/// This is based on typical MTUs.
+const BYTES_PER_PACKET: u64 = 1500;
+
 /// Describes a TCP/IP packet
 ///
 /// The two protocols are merged together. Although not technically accurate, it is rare for TCP
@@ -25,9 +28,6 @@ pub struct Flow {
     cwnd: u64,
     next_seq: u64,
 }
-
-/// This is based on typical MTUs.
-const BYTES_PER_PACKET: u64 = 1500;
 
 impl Flow {
     pub fn new(src: usize, dst: usize, n_packets: u64) -> Flow {
