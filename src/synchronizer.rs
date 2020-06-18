@@ -70,7 +70,6 @@ pub struct Event {
     pub time: u64,
     pub src: usize,
     pub event_type: EventType,
-    //function: Box<dyn FnOnce() -> ()>,
 }
 
 impl Ord for Event {
@@ -90,7 +89,7 @@ impl PartialEq for Event {
         self.time == other.time
     }
 }
-impl Eq for Event {} // don't use function
+impl Eq for Event {}
 
 
 /// Manages the input queues and returns the next [`Event`](struct.Event.html) to be processed.
