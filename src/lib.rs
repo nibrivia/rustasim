@@ -9,8 +9,6 @@ use std::thread;
 
 pub mod engine;
 pub mod network;
-//pub mod nic;
-//pub mod tcp;
 
 use crate::engine::*;
 use crate::network::nic::*;
