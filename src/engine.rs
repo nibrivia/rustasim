@@ -22,20 +22,17 @@ use std::mem;
 
 /// Event types and their associated data.
 ///
-/// There currently is a little bit of a mix of abstractions here. Most event types should be
-/// defined by the user for the desired simulation model. Right now adding a new event means
-/// modifying this struct.
+/// These are all simulation-driving related events. None of them have anything to do with the
+/// specific model being simulated. Each model will presumably require different event models, to
+/// be passed in (probably as an enum, but as you wish) as `<U>`.
 ///
-/// **In the future, event types that belong in the model (packet arrival, flow arrival, etc...)
-/// should be defined out of this crate.**
-///
-/// There are two necessary event types: `Stalled`, and `Null`. Both need an implementation by the
-/// user, and are required for all simulations.
+/// There are two necessary event types: `Stalled`, and `Null`. Both need processing by the
+/// associated actor, and are required for all simulations.
 ///
 /// The `Close` event type is sufficiently universal that it will presumably also stay here.
 #[derive(Debug)]
 pub enum EventType<U> {
-    /// User event,
+    /// Define `<U>` as you wish for your model
     ModelEvent(U),
 
     /// The simulation is stalled, the actor must update its neighbours with null-events
