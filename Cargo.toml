@@ -6,11 +6,7 @@ edition = "2018"
 readme = "README.md"
 repository = "https://github.com/nibrivia/rustasim"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-# crossbeam = "0.7.3"
-# crossbeam = { git = "https://github.com/stjepang/crossbeam.git", rev = "d1736eff0834302e30bda0d259c920b6d7ed0a58" }
 crossbeam = { git = "https://github.com/nibrivia/crossbeam.git" , branch = "wait" }
 
 [profile.release]

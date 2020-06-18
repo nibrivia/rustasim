@@ -106,20 +106,7 @@ impl Router {
     }
 
     pub fn start(mut self) -> u64 {
-        // TODO very hacky...
         let merger = Merger::new(self.in_queues);
-
-        // kickstart stuff up
-        for (dst_ix, out_q) in self.out_queues.iter_mut().enumerate() {
-            out_q
-                .push(Event {
-                    event_type: EventType::Null,
-                    src: self.id,
-                    time: self.latency_ns,
-                })
-                .unwrap();
-            self.out_times[dst_ix] = self.latency_ns;
-        }
 
         // TODO auto route
         // route is an id->ix structure

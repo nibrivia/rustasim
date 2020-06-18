@@ -4,7 +4,17 @@ use crossbeam::queue::spsc;
 
 use crate::tcp::*;
 
-
+/// Event types and their associated data.
+///
+/// There currently is a little bit of a mix of abstractions here. Most event types should be
+/// defined by the user for the desired simulation model. Right now adding a new event means
+/// modifying this struct.
+///
+/// In the future, event types that belong in the model (packet arrival, flow arrival, etc...)
+/// should be defined out of this crate.
+///
+/// There are two necessary event types: `Stalled`, and `Null`. Both need an implementation by the
+/// user, and are required for all simulations.
 #[derive(Debug)]
 pub enum EventType {
     Flow(Flow),
@@ -15,6 +25,16 @@ pub enum EventType {
     //NICEnable { nic: usize },
 }
 
+/// Fully describes an event.
+///
+/// The `src` field will almost certainly get modified as it works its way through the event
+/// merger. Event creators should set `src` to be their own, unique, id, the
+/// [`Merger`](struct.Merger.html) of the receiving actor will appropriately translate it into and
+/// index.
+///
+/// Receivers should assume `src` is the *index* of the source, and not the id.
+///
+/// Events are ordered by their time.
 #[derive(Debug)]
 pub struct Event {
     pub time: u64,
@@ -43,6 +63,10 @@ impl PartialEq for Event {
 impl Eq for Event {} // don't use function
 
 
+/// Manages the input queues and returns the next [`Event`](struct.Event.html) to be processed.
+///
+/// The events returned by `Merger` are monotonically increasing and come from either neighbours,
+/// or from the Merger itself upon a potential Stall.
 #[derive(Debug)]
 pub struct Merger {
     // the input queues
@@ -60,7 +84,29 @@ pub struct Merger {
     loser_e : Vec<Event>,
 }
 
-fn ltr_walk(n_nodes: usize) -> Vec<usize> {
+/// Returns indices into an 1-indexed array a tree with `n_nodes` leaves from left-to-right.
+///
+/// This means that it takes the leftmost leaf first, goes up to its parent, then the second
+/// leftmost leaf, and so on...
+///
+/// If the tree has 6 leaves, it will have 2 leaves at 4, 5, and 3:
+/// ```no-run
+///     1
+///  2     3
+/// 4 5    |
+/// ^ ^    ^
+/// ```
+///
+/// And the left-to-right walk will be `[4, 2, 5, 1, 3]`.
+///
+/// # Examples
+///
+/// ```
+/// let indices = rustasim::synchronizer::ltr_walk(6);
+/// assert_eq!(indices, vec![4, 2, 5, 1, 3]);
+/// ```
+///
+pub fn ltr_walk(n_nodes: usize) -> Vec<usize> {
     let n_layers = (n_nodes as f32).log2().ceil() as usize;
 
     // visited structure
@@ -110,7 +156,7 @@ fn ltr_walk(n_nodes: usize) -> Vec<usize> {
 }
 
 impl Merger {
-    // Takes all the queues
+    /// Builds a new merger from a set of input queues
     pub fn new(in_queues : Vec<spsc::Consumer<Event>>) -> Merger {
         let mut loser_e = Vec::new();
         let winner_q = 0;
@@ -178,7 +224,7 @@ impl Merger {
         }
     }
 
-    // May return None if waiting on an input queue
+    /// Non-blocking next event. Used for testing.
     fn _try_pop(&mut self) -> Option<Event> {
         if self.in_queues[self.winner_q].len() > 0 {
             return self.next();
@@ -208,7 +254,10 @@ impl Iterator for Merger {
                     if !self.stalled {
                         // return Stalled event
                         self.stalled = true;
-                        return Some(Event { time : self.safe_time, src : self.winner_q, event_type: EventType::Stalled });
+                        return Some(Event {
+                            time : self.safe_time,
+                            src : self.winner_q,
+                            event_type: EventType::Stalled });
                     } else {
                         // blocking wait
                         q.wait();
