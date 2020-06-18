@@ -29,19 +29,30 @@ use crate::tcp::*;
 /// defined by the user for the desired simulation model. Right now adding a new event means
 /// modifying this struct.
 ///
-/// In the future, event types that belong in the model (packet arrival, flow arrival, etc...)
-/// should be defined out of this crate.
+/// **In the future, event types that belong in the model (packet arrival, flow arrival, etc...)
+/// should be defined out of this crate.**
 ///
 /// There are two necessary event types: `Stalled`, and `Null`. Both need an implementation by the
 /// user, and are required for all simulations.
 #[derive(Debug)]
 pub enum EventType {
     Flow(Flow),
+
     Packet(Packet),
+
+    /// The simulation is stalled, the actor must update its neighbours with null-events
     Stalled,
+
+    /// It is safe for the simulaiton to advance to this time.
+    ///
+    /// Actors may also assert `unreachable!` for this event type. It is processed internally and
+    /// never sent to the actor.
     Null,
+
+    /// Simulation end.
+    ///
+    /// Actors should update neighbours appropriately to ensure they will terminate.
     Close,
-    //NICEnable { nic: usize },
 }
 
 /// Fully describes an event.
@@ -121,11 +132,11 @@ pub struct Merger {
 /// # Examples
 ///
 /// ```
-/// let indices = rustasim::synchronizer::ltr_walk(6);
-/// assert_eq!(indices, vec![4, 2, 5, 1, 3]);
+/// //let indices = rustasim::synchronizer::ltr_walk(6);
+/// //assert_eq!(indices, vec![4, 2, 5, 1, 3]);
 /// ```
 ///
-pub fn ltr_walk(n_nodes: usize) -> Vec<usize> {
+fn ltr_walk(n_nodes: usize) -> Vec<usize> {
     let n_layers = (n_nodes as f32).log2().ceil() as usize;
 
     // visited structure
