@@ -2,24 +2,31 @@ use std::time::Instant;
 
 use rustasim::World;
 
+
 fn main() {
-    println!("Setup...");
+    // TODO pass in time_limit, n_threads as arguments
+
+    let time_limit: u64 = 001_000_000_000;
+    //                      s  ms  us  ns
+    //let time_limit: u64 = 000_111_111_000;
 
     let n_thread = 7;
+
+    println!("Setup...");
     let world = World::new(n_thread);
 
     println!("Run...");
-
     let start = Instant::now();
-    let counts = world.start();
+    let counts = world.start(time_limit);
     let duration = start.elapsed();
 
+    // stats...
     let sum_count = counts.iter().sum::<u64>();
     let mut ns_per_count = 0;
     if sum_count > 0 {
         ns_per_count = 1000 * duration.as_nanos() / sum_count as u128;
     }
-    let gbps = ((n_thread*(n_thread-1) * 8) as f64) * (rustasim::DONE as f64)/1e9 / duration.as_secs_f64();
+    let gbps = ((n_thread*(n_thread-1) * 8) as f64) * (time_limit as f64)/1e9 / duration.as_secs_f64();
 
     println!("= {} / {}s", sum_count, duration.as_secs_f32());
     println!("  {}M count/sec, {}M count/sec/thread",

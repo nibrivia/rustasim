@@ -1,3 +1,4 @@
+//! Implements a basic version of TCP
 
 #[derive(Debug)]
 pub struct Packet {

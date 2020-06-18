@@ -34,6 +34,8 @@ use crate::tcp::*;
 ///
 /// There are two necessary event types: `Stalled`, and `Null`. Both need an implementation by the
 /// user, and are required for all simulations.
+///
+/// The `Close` event type is sufficiently universal that it will presumably also stay here.
 #[derive(Debug)]
 pub enum EventType {
     Flow(Flow),

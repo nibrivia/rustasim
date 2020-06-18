@@ -1,3 +1,9 @@
+//! Parallel datacenter network simulator
+//!
+//! Throughout this crate there is a user-backend relationship between the [simulation
+//! engine](synchronizer/index.html) and the model. In general, the engine should be agnostic to
+//! the type of model being run, and should probably eventually be pulled out into its own crate.
+
 use std::thread;
 use crossbeam::queue::spsc::*;
 
@@ -9,17 +15,23 @@ use crate::nic::*;
 use crate::tcp::*;
 use crate::synchronizer::*;
 
-// TODO pass in limits as arguments
-//                  s   ms  us  ns
-pub const DONE: u64 = 001_000_000_000;
-//const DONE: u64 = 000_111_111_000;
-
 pub struct World {
+    /// The actors themselves
     racks : Vec<Router>,
+
+    /// Communication channels from us (the world) to the actors
     chans : Vec<Producer<Event>>,
 }
 
+/// Main simulation object.
+///
+/// This is where the core of the simualtion setup should happen. Notably it has the important
+/// tasks of connection actors together, and to give "external" events to these actors.
+///
+/// Setthing up and running the simulation are done in two phases. This feels like good design, but
+/// it is not clear to me why.
 impl World {
+    /// Sets up a world ready for simulation
     pub fn new(n_racks : usize) -> World {
 
         // Create the racks and connect them all up
@@ -73,11 +85,14 @@ impl World {
         }
     }
 
-    pub fn start(mut self) -> Vec<u64> {
+    /// Runs this `World`'s simulation up to time `done`.
+    ///
+    /// This will spawn a thread per actor and wait for all of them to end.
+    pub fn start(mut self, done : u64) -> Vec<u64> {
         // Tell everyone when the end is
         for c in self.chans.iter_mut() {
             c.push(Event {
-                time: DONE,
+                time: done,
                 src: 0,
                 event_type: EventType::Close,
             }).unwrap();
