@@ -16,12 +16,11 @@
 //!
 // TODO description of when the null-message should be sent and what it should look like
 
-use std::mem;
-use std::cmp::Ordering;
 use crossbeam::queue::spsc;
+use std::cmp::Ordering;
+use std::mem;
 
 use crate::tcp::*;
-
 
 /// Event types and their associated data.
 ///
@@ -93,7 +92,6 @@ impl PartialEq for Event {
 }
 impl Eq for Event {}
 
-
 /// Manages the input queues and returns the next [`Event`](struct.Event.html) to be processed.
 ///
 /// The events returned by `Merger` are monotonically increasing and come from either neighbours,
@@ -101,18 +99,18 @@ impl Eq for Event {}
 #[derive(Debug)]
 pub struct Merger {
     // the input queues
-    in_queues : Vec<spsc::Consumer<Event>>,
-    n_layers : usize,
+    in_queues: Vec<spsc::Consumer<Event>>,
+    n_layers: usize,
 
-    paths : Vec<usize>,
+    paths: Vec<usize>,
 
     // the queue to pull from
-    winner_q : usize,
+    winner_q: usize,
     safe_time: u64,
-    stalled : bool,
+    stalled: bool,
 
     // the loser queue
-    loser_e : Vec<Event>,
+    loser_e: Vec<Event>,
 }
 
 /// Returns indices into an 1-indexed array a tree with `n_nodes` leaves from left-to-right.
@@ -141,12 +139,12 @@ fn ltr_walk(n_nodes: usize) -> Vec<usize> {
     let n_layers = (n_nodes as f32).log2().ceil() as usize;
 
     // visited structure
-    let mut visited : Vec<bool> = Vec::new();
-    for _ in 0..n_nodes+1 {
+    let mut visited: Vec<bool> = Vec::new();
+    for _ in 0..n_nodes + 1 {
         visited.push(false);
     }
 
-    let mut cur_index = 2_usize.pow((n_layers-1) as u32);
+    let mut cur_index = 2_usize.pow((n_layers - 1) as u32);
 
     let mut indices = Vec::new();
 
@@ -154,8 +152,7 @@ fn ltr_walk(n_nodes: usize) -> Vec<usize> {
     visited[cur_index] = true;
     let mut going_up = true;
 
-
-    for _ in 0..n_nodes-1 {
+    for _ in 0..n_nodes - 1 {
         if going_up {
             while visited[cur_index] {
                 cur_index /= 2;
@@ -188,36 +185,48 @@ fn ltr_walk(n_nodes: usize) -> Vec<usize> {
 
 impl Merger {
     /// Builds a new merger from a set of input queues
-    pub fn new(in_queues : Vec<spsc::Consumer<Event>>) -> Merger {
+    pub fn new(in_queues: Vec<spsc::Consumer<Event>>) -> Merger {
         let mut loser_e = Vec::new();
         let winner_q = 0;
 
         // index 0 never gets used
-        loser_e.push(Event { time : 0, event_type: EventType::Null, src: 0});
+        loser_e.push(Event {
+            time: 0,
+            event_type: EventType::Null,
+            src: 0,
+        });
 
         // TODO hacky
         // fill with placeholders
         for i in 1..in_queues.len() {
-            loser_e.push(Event { time : 0, event_type: EventType::Null, src: i});
+            loser_e.push(Event {
+                time: 0,
+                event_type: EventType::Null,
+                src: i,
+            });
         }
 
         // appropriately set the source
         for (loser, ix) in ltr_walk(in_queues.len()).iter().enumerate() {
-            loser_e[*ix] = Event { time : 0, event_type: EventType::Null, src: loser+1};
+            loser_e[*ix] = Event {
+                time: 0,
+                event_type: EventType::Null,
+                src: loser + 1,
+            };
         }
 
         // helfpul number
         let n_queues = in_queues.len();
         let n_layers = (n_queues as f32).log2().ceil() as usize;
         let largest_full_layer = 2_usize.pow((n_queues as f32).log2().floor() as u32);
-        let last_layer_max_i = ((n_queues + largest_full_layer-1) % largest_full_layer + 1) * 2;
-        let offset = (last_layer_max_i+1)/2;
+        let last_layer_max_i = ((n_queues + largest_full_layer - 1) % largest_full_layer + 1) * 2;
+        let offset = (last_layer_max_i + 1) / 2;
 
         let mut paths = Vec::new();
         for ix in 0..n_queues {
             let v_ix;
             if ix > last_layer_max_i {
-                v_ix = (ix-offset)*2;
+                v_ix = (ix - offset) * 2;
             } else {
                 v_ix = ix;
             }
@@ -239,14 +248,14 @@ impl Merger {
             }
 
             paths.push(index);
-        };
+        }
 
         Merger {
             in_queues,
             n_layers,
 
             winner_q,
-            safe_time : 0,
+            safe_time: 0,
             stalled: false,
 
             paths,
@@ -286,9 +295,10 @@ impl Iterator for Merger {
                         // return Stalled event
                         self.stalled = true;
                         return Some(Event {
-                            time : self.safe_time,
-                            src : self.winner_q,
-                            event_type: EventType::Stalled });
+                            time: self.safe_time,
+                            src: self.winner_q,
+                            event_type: EventType::Stalled,
+                        });
                     } else {
                         // blocking wait
                         q.wait();
@@ -338,8 +348,8 @@ impl Iterator for Merger {
 
 #[cfg(test)]
 mod test_merger {
-    use crossbeam::queue::spsc;
     use crate::synchronizer::*;
+    use crossbeam::queue::spsc;
     use std::{thread, time};
 
     #[test]
@@ -393,7 +403,7 @@ mod test_merger {
     fn test_merge_many_interleave() {
         for n_queues in 3..20 {
             println!("{} queues =======================", n_queues);
-            test_interleave(n_queues, n_queues+5);
+            test_interleave(n_queues, n_queues + 5);
         }
     }
 
@@ -401,11 +411,11 @@ mod test_merger {
     fn test_merge_many_threads() {
         for n_queues in 3..20 {
             println!("{} queues =======================", n_queues);
-            test_pushpop(n_queues, n_queues+5);
+            test_pushpop(n_queues, n_queues + 5);
         }
     }
 
-    fn test_interleave(n_queues : usize, n_events : usize) {
+    fn test_interleave(n_queues: usize, n_events: usize) {
         // Create our event queues
         let mut prod_qs = Vec::new();
         let mut cons_qs = Vec::new();
@@ -422,14 +432,22 @@ mod test_merger {
         //prod_qs
         println!("Pushing events");
         for (src, prod) in prod_qs.iter().enumerate() {
-            for i in 1..n_events+1 {
-                let e = Event { time: (src*1+i) as u64, src, event_type : EventType::Close };
+            for i in 1..n_events + 1 {
+                let e = Event {
+                    time: (src * 1 + i) as u64,
+                    src,
+                    event_type: EventType::Close,
+                };
                 println!("  {} <- {:?}", i, e);
                 prod.push(e).unwrap();
             }
 
             // close sentinel
-            let e = Event { time: 100000, src, event_type : EventType::Close };
+            let e = Event {
+                time: 100000,
+                src,
+                event_type: EventType::Close,
+            };
             prod.push(e).unwrap();
         }
 
@@ -440,9 +458,12 @@ mod test_merger {
         while let Some(event) = merger._try_pop() {
             println!("    => {:?}", event);
 
-            assert!(cur_time <= event.time,
+            assert!(
+                cur_time <= event.time,
                 "Time invariant violated. Previous event was @{}, current event @{}",
-                cur_time, event.time);
+                cur_time,
+                event.time
+            );
             cur_time = event.time;
             event_count += 1;
         }
@@ -450,11 +471,14 @@ mod test_merger {
         // n_q*n_e events, 1 close event
         let expected_count = n_queues * n_events + 1;
 
-        assert_eq!(event_count, expected_count,
-            "Expected {} events, saw {}", expected_count, event_count);
+        assert_eq!(
+            event_count, expected_count,
+            "Expected {} events, saw {}",
+            expected_count, event_count
+        );
     }
 
-    fn test_pushpop(n_queues : usize, n_events : usize) {
+    fn test_pushpop(n_queues: usize, n_events: usize) {
         // Create our event queues
         let mut prod_qs = Vec::new();
         let mut cons_qs = Vec::new();
@@ -486,35 +510,52 @@ mod test_merger {
                     continue;
                 }
 
-                assert!(cur_time <= event.time,
+                assert!(
+                    cur_time <= event.time,
                     "Time invariant violated. Previous event was @{}, current event @{}",
-                    cur_time, event.time);
+                    cur_time,
+                    event.time
+                );
                 cur_time = event.time;
                 event_count += 1;
             }
 
             if let Some(event) = merger._try_pop() {
-                assert!(false, "Merger should not have any more events, got {:?}", event);
+                assert!(
+                    false,
+                    "Merger should not have any more events, got {:?}",
+                    event
+                );
             }
 
-            assert_eq!(event_count, expected_count,
-                "Expected {} events, saw {}", expected_count, event_count);
+            assert_eq!(
+                event_count, expected_count,
+                "Expected {} events, saw {}",
+                expected_count, event_count
+            );
         });
 
         for (src, prod) in prod_qs.iter().enumerate().rev() {
-            for i in 1..n_events+1 {
-                let e = Event { time: (src*1+4*i) as u64, src, event_type : EventType::Close };
+            for i in 1..n_events + 1 {
+                let e = Event {
+                    time: (src * 1 + 4 * i) as u64,
+                    src,
+                    event_type: EventType::Close,
+                };
                 //println!("  {} <- {:?}", i, e);
                 prod.push(e).unwrap();
                 thread::sleep(time::Duration::from_micros(1));
             }
 
             // close sentinel
-            let e = Event { time: 100000, src, event_type : EventType::Close };
+            let e = Event {
+                time: 100000,
+                src,
+                event_type: EventType::Close,
+            };
             prod.push(e).unwrap();
         }
 
         handle.join().unwrap();
     }
 }
-

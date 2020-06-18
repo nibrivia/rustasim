@@ -1,5 +1,9 @@
 //! Implements a basic version of TCP
 
+/// Describes a TCP/IP packet
+///
+/// The two protocols are merged together. Although not technically accurate, it is rare for TCP
+/// packets to be split, at least not in datacenter networks.
 #[derive(Debug)]
 pub struct Packet {
     pub src: usize,
@@ -22,6 +26,7 @@ pub struct Flow {
     next_seq: u64,
 }
 
+/// This is based on typical MTUs.
 const BYTES_PER_PACKET: u64 = 1500;
 
 impl Flow {
@@ -42,7 +47,7 @@ impl Flow {
     }
 
     // TODO how to timeout?
-    pub fn dst_receive(&mut self, _packet : Packet) {
+    pub fn dst_receive(&mut self, _packet: Packet) {
         // TODO process arriving packet
         // TODO send new packets
     }
@@ -68,4 +73,3 @@ impl Iterator for Flow {
         }
     }
 }
-

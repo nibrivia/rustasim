@@ -1,7 +1,7 @@
-use std::fmt;
+use crossbeam::queue::spsc;
 use crossbeam::queue::spsc::*;
 use std::collections::HashMap;
-use crossbeam::queue::spsc;
+use std::fmt;
 
 use crate::synchronizer::*;
 
@@ -18,7 +18,7 @@ pub struct Router {
 
     // event management
     //event_receiver: EventScheduler,
-    in_queues : Vec<Consumer<Event>>,
+    in_queues: Vec<Consumer<Event>>,
     out_queues: Vec<Producer<Event>>,
     out_times: Vec<u64>,
 
@@ -35,7 +35,6 @@ impl fmt::Display for Router {
     }
 }
 
-
 impl Router {
     pub fn new(id: usize) -> Router {
         Router {
@@ -48,7 +47,7 @@ impl Router {
             next_ix: 0,
 
             //event_receiver: EventScheduler::new(id),
-            in_queues : Vec::new(),
+            in_queues: Vec::new(),
             out_queues: Vec::new(),
             out_times: Vec::new(),
             //out_notify : HashMap::new(),
@@ -136,7 +135,7 @@ impl Router {
                     }
 
                     break;
-                },
+                }
 
                 // We're waiting on a neighbour...
                 EventType::Stalled => {
@@ -159,16 +158,16 @@ impl Router {
                             self.out_times[dst_ix] = event.time;
                         }
                     }
-                },
+                }
 
                 // This is a message from neighbour we were waiting on, it has served its purpose
                 EventType::Null => {
                     //println!("@{} Router #{} got null from #{}",
                     //event.time, self.id, self.ix_to_id[&event.src]);
                     unreachable!();
-                },
+                }
 
-                EventType::Flow(_flow) => {},
+                EventType::Flow(_flow) => {}
 
                 EventType::Packet(mut packet) => {
                     //self.count += 1;
@@ -197,8 +196,10 @@ impl Router {
                         src: self.id,
                         time: rx_end,
                     }) {
-                        println!("@{} Router #{} push error to #{}: {:?}",
-                            event.time, self.id, self.ix_to_id[&next_hop_ix], e);
+                        println!(
+                            "@{} Router #{} push error to #{}: {:?}",
+                            event.time, self.id, self.ix_to_id[&next_hop_ix], e
+                        );
                         break;
                     }
 
@@ -210,7 +211,6 @@ impl Router {
         println!("Router #{} done. {} pkts", self.id, self.count);
         return self.count;
     } // end start() function
-
 } // end NIC methods
 
 /*
