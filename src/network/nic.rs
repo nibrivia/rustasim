@@ -276,6 +276,7 @@ impl Router {
 pub struct Server {
     id: usize,
 
+    ns_per_byte: u64,
     latency_ns: u64,
 
     id_to_ix: HashMap<usize, usize>,
@@ -284,7 +285,6 @@ pub struct Server {
 
     in_queues: Vec<Consumer<ModelEvent>>,
     out_queues: Vec<Producer<ModelEvent>>,
-    out_times: Vec<u64>,
 
     //tor_link: Producer<ModelEvent>,
     //world_link: Producer<ModelEvent>,
@@ -312,7 +312,6 @@ impl Connectable for &mut Server {
         let tx_queue = (other).back_connect(&mut **self, prod);
         self.out_queues.push(tx_queue);
         self.in_queues.push(cons);
-        self.out_times.push(0);
 
         self.next_ix += 1;
     }
@@ -326,8 +325,6 @@ impl Connectable for &mut Server {
         self.ix_to_id.insert(self.next_ix, other.id());
 
         self.out_queues.push(tx_queue);
-        self.out_times.push(0);
-        // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
 
         let (prod, cons) = spsc::new(128);
         self.in_queues.push(cons);
@@ -361,7 +358,8 @@ impl Server {
         Server {
             id,
 
-            latency_ns: 10,
+            ns_per_byte: 1,
+            latency_ns: 100,
 
             id_to_ix,
             ix_to_id,
@@ -369,7 +367,6 @@ impl Server {
 
             in_queues,
             out_queues,
-            out_times,
 
             flows: HashMap::new(),
 
@@ -390,10 +387,22 @@ impl Server {
     }
 
     pub fn start(mut self) -> u64 {
-        let merger = Merger::new(self.in_queues);
+        // FIXME timeouts not yet implemented, let's keep this channel inactive
+        self.out_queues[0]
+            .push(Event {
+                event_type: EventType::Close,
+                src: self.id,
+                time: 1_000_000_000_000_000, // large value
+            })
+            .unwrap();
 
         println!("Server starting... {:?}", self.id_to_ix);
 
+        let mut tor_time = 0;
+        let tor_q = &self.out_queues[1];
+        //let mut self_time = 0;
+
+        let merger = Merger::new(self.in_queues);
         for event in merger {
             self.count += 1;
             //println!("@{} event #{}", event.time, self.count);
@@ -414,12 +423,9 @@ impl Server {
                 }
 
                 EventType::Stalled => {
-                    //println!("stall {:?}", self.out_times);
-                    // we don't need to tell world to move forward
-
                     // TODO how on earth do we tell ourselves to move forward??
                     // min timeout of 100us
-                    let self_time = self.out_times[0];
+                    /*
                     if self_time <= event.time {
                         //let cur_time = std::cmp::max(event.time, out_time);
                         self.out_queues[0]
@@ -433,14 +439,14 @@ impl Server {
 
                         self.out_times[0] = event.time;
                     }
+                    */
 
                     // ToR
-                    let out_time = self.out_times[1];
                     // equal because they might just need a jog, blocking happens in the
                     // iterator, so no infinite loop risk
-                    if out_time <= event.time {
+                    if tor_time <= event.time {
                         //let cur_time = std::cmp::max(event.time, out_time);
-                        self.out_queues[1]
+                        tor_q
                             .push(Event {
                                 event_type: EventType::Null,
                                 src: self.id,
@@ -449,22 +455,65 @@ impl Server {
                             .unwrap();
                         //self.count += 1;
 
-                        self.out_times[1] = event.time;
+                        tor_time = event.time;
                     }
                 }
 
                 EventType::Null => unreachable!(),
 
-                EventType::ModelEvent(net_event) => match net_event {
-                    NetworkEvent::Flow(flow) => {
-                        println!("flow");
-                        self.flows.insert(flow.flow_id, flow);
+                EventType::ModelEvent(net_event) => {
+                    // both of these might schedule packets and timeouts
+                    let (packets, timeouts) = match net_event {
+                        NetworkEvent::Flow(mut flow) => {
+                            println!("flow");
+                            let start = flow.start();
+                            self.flows.insert(flow.flow_id, flow);
+                            start
+                        }
+
+                        NetworkEvent::Packet(mut packet) => {
+                            println!("packet {:?}", packet);
+
+                            if !packet.is_ack {
+                                // this is data, send ack back
+                                packet.dst = packet.src;
+                                packet.src = self.id;
+
+                                packet.is_ack = true;
+                                packet.size_byte = 10;
+
+                                (vec![packet], vec![])
+                            } else {
+                                // this is an ACK
+                                let flow = self.flows.get_mut(&packet.flow_id).unwrap();
+                                flow.src_receive(packet)
+                            }
+                        }
+                    };
+
+                    // send the packets
+                    for p in packets {
+                        let tx_end = tor_time + self.ns_per_byte * p.size_byte;
+                        let rx_end = tx_end + self.latency_ns;
+
+                        // actually send the packet :)
+                        tor_q
+                            .push(Event {
+                                event_type: EventType::ModelEvent(NetworkEvent::Packet(p)),
+                                src: self.id,
+                                time: rx_end,
+                            })
+                            .unwrap();
+
+                        // TODO move out of loop?
+                        tor_time = tx_end;
                     }
 
-                    NetworkEvent::Packet(packet) => {
-                        println!("packet {:?}", packet);
+                    // TODO schedule the timeouts
+                    for _ in timeouts {
+                        // self_q.push(...)
                     }
-                },
+                }
             }
         }
 

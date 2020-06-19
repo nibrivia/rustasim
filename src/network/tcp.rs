@@ -14,6 +14,10 @@ pub struct Packet {
     pub seq_num: u64,
     pub size_byte: u64,
 
+    pub is_ack: bool,
+
+    pub flow_id: usize,
+
     pub ttl: u64,
     pub sent_ns: u64,
 }
@@ -23,7 +27,7 @@ pub struct Flow {
     pub flow_id: usize,
     pub src: usize,
     pub dst: usize,
-    pub size_byte: u64,
+    size_byte: u64,
 
     cwnd: u64,
     next_seq: u64,
@@ -42,14 +46,18 @@ impl Flow {
         }
     }
 
-    pub fn start(&self) {
-        // TODO
+    pub fn start(&mut self) -> (Vec<Packet>, Vec<u64>) {
+        let mut packets = Vec::new();
+        packets.push(self.next().unwrap());
+
+        (packets, Vec::new())
     }
 
-    // TODO how to timeout?
-    pub fn dst_receive(&mut self, _packet: Packet) {
-        // TODO process arriving packet
-        // TODO send new packets
+    pub fn src_receive(&mut self, _packet: Packet) -> (Vec<Packet>, Vec<u64>) {
+        let mut packets = Vec::new();
+        packets.push(self.next().unwrap());
+
+        (packets, Vec::new())
     }
 }
 
@@ -57,12 +65,17 @@ impl Iterator for Flow {
     type Item = Packet;
 
     fn next(&mut self) -> Option<Self::Item> {
+        // TODO manage retransmits
         if self.next_seq * BYTES_PER_PACKET < self.size_byte {
             let p = Packet {
                 src: self.src,
                 dst: self.dst,
                 seq_num: self.next_seq,
                 size_byte: BYTES_PER_PACKET,
+
+                flow_id: self.flow_id,
+                is_ack: false,
+
                 ttl: 10,
                 sent_ns: 0,
             };
