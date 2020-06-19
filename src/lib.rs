@@ -41,7 +41,7 @@ impl World {
             let mut r = Router::new(id);
             for id2 in 1..id {
                 let rack2 = racks.get_mut(id2 - 1).unwrap();
-                r.connect(Box::new(*rack2));
+                (&mut r).connect(rack2);
             }
             racks.push(r);
         }

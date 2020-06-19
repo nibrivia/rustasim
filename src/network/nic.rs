@@ -13,10 +13,10 @@ use crate::network::NetworkEvent;
 pub trait Connectable {
     fn id(&self) -> usize;
 
-    fn connect(&mut self, other: Box<dyn Connectable>);
+    fn connect(&mut self, other: impl Connectable);
     fn back_connect(
         &mut self,
-        other: Box<dyn Connectable>,
+        other: impl Connectable,
         tx_queue: Producer<ModelEvent>,
     ) -> Producer<ModelEvent>;
 }
@@ -59,18 +59,18 @@ impl fmt::Display for Router {
     }
 }
 
-impl Connectable for Router {
+impl Connectable for &mut Router {
     fn id(&self) -> usize {
         self.id
     }
 
-    fn connect(&mut self, mut other: Box<dyn Connectable>) {
+    fn connect(&mut self, mut other: impl Connectable) {
         let (prod, cons) = spsc::new(128);
 
         self.id_to_ix.insert(other.id(), self.next_ix);
         self.ix_to_id.insert(self.next_ix, other.id());
 
-        let tx_queue = other.back_connect(Box::new(*self), prod);
+        let tx_queue = (other).back_connect(&mut **self, prod);
         self.out_queues.push(tx_queue);
         self.in_queues.push(cons);
         self.out_times.push(0);
@@ -82,7 +82,7 @@ impl Connectable for Router {
 
     fn back_connect(
         &mut self,
-        other: Box<dyn Connectable>,
+        other: impl Connectable,
         tx_queue: Producer<ModelEvent>,
     ) -> Producer<ModelEvent> {
         self.id_to_ix.insert(other.id(), self.next_ix);
