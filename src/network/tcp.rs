@@ -41,14 +41,16 @@ impl Flow {
             dst,
 
             size_byte: n_packets * BYTES_PER_PACKET,
-            cwnd: 1,
+            cwnd: 10,
             next_seq: 0,
         }
     }
 
     pub fn start(&mut self) -> (Vec<Packet>, Vec<u64>) {
         let mut packets = Vec::new();
-        packets.push(self.next().unwrap());
+        for _ in 0..self.cwnd {
+            packets.push(self.next().unwrap());
+        }
 
         (packets, Vec::new())
     }

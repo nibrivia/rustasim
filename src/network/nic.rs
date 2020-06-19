@@ -219,7 +219,8 @@ impl Router {
 
                 EventType::ModelEvent(model_event) => {
                     match model_event {
-                        NetworkEvent::Flow(_flow) => {}
+                        // this is only for servers, not routers
+                        NetworkEvent::Flow(_flow) => unreachable!(),
 
                         NetworkEvent::Packet(mut packet) => {
                             //self.count += 1;

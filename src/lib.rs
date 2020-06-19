@@ -52,15 +52,33 @@ impl World {
         // source under rack 0
         let mut s = Server::new(99);
         (&mut s).connect(racks.get_mut(0).unwrap());
+        servers.push(s);
 
         // dest under rack 2
         let mut d = Server::new(100);
         (&mut d).connect(racks.get_mut(2).unwrap());
-
-        servers.push(s);
         servers.push(d);
 
+        // conect world
+        let mut chans = Vec::new();
+        for s in &mut servers {
+            chans.push(s.connect_world());
+        }
+        for r in &mut racks {
+            chans.push(r.connect_world());
+        }
+
         // flows
+        let f = Flow::new(99, 100, 40);
+        chans[0]
+            .push(Event {
+                src: 0,
+                time: 0,
+                event_type: EventType::ModelEvent(NetworkEvent::Flow(f)),
+            })
+            .unwrap();
+
+        /*
         for src in 1..n_racks + 1 {
             for dst in 1..n_racks + 1 {
                 // skip self->self
@@ -85,19 +103,11 @@ impl World {
                 dst_rack.init_queue(src, packets);
             }
         }
+        */
 
         // TODO backbone switches
 
-        // conect world
-        let mut chans = Vec::new();
-        for r in &mut racks {
-            chans.push(r.connect_world());
-        }
-        for s in &mut servers {
-            chans.push(s.connect_world());
-        }
-
-        // reuturn world
+        // return world
         World {
             racks,
             servers,
