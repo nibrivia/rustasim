@@ -348,7 +348,6 @@ impl Server {
 
         let mut out_times = Vec::new();
 
-
         // self queue
         let (self_prod, self_cons) = spsc::new(128);
 
