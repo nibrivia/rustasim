@@ -19,6 +19,7 @@ use crate::network::NetworkEvent;
 pub struct World {
     /// The actors themselves
     racks: Vec<Router>,
+    servers: Vec<Server>,
 
     /// Communication channels from us (the world) to the actors
     chans: Vec<Producer<ModelEvent>>,
@@ -46,8 +47,10 @@ impl World {
             racks.push(r);
         }
 
+        let mut servers = Vec::new();
         let mut s = Server::new(99);
         (&mut s).connect(racks.get_mut(0).unwrap());
+        servers.push(s);
 
         // flows
         for src in 1..n_racks + 1 {
@@ -82,9 +85,16 @@ impl World {
         for r in &mut racks {
             chans.push(r.connect_world());
         }
+        for s in &mut servers {
+            chans.push(s.connect_world());
+        }
 
         // reuturn world
-        World { racks, chans }
+        World {
+            racks,
+            servers,
+            chans,
+        }
     }
 
     /// Runs this `World`'s simulation up to time `done`.
@@ -105,6 +115,9 @@ impl World {
         let mut handles = Vec::new();
         for r in self.racks {
             handles.push(thread::spawn(move || r.start()));
+        }
+        for s in self.servers {
+            handles.push(thread::spawn(move || s.start()));
         }
 
         // Get the results

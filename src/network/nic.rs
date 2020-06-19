@@ -6,15 +6,19 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::engine::*;
-//use crate::network::tcp;
+use crate::network::tcp;
 use crate::network::ModelEvent;
 use crate::network::NetworkEvent;
 
+/// Device types
 pub enum Device {
     Router,
     Server,
 }
 
+/// A standard interface for connecting devices of all types
+// TODO change this API, connect(a, b) function, connectable just has functions for giving and
+// getting queues.
 pub trait Connectable {
     fn id(&self) -> usize;
     fn flavor(&self) -> Device;
@@ -264,17 +268,35 @@ impl Router {
     } // end start() function
 } // end NIC methods
 
+/// Server-in-a-rack actor
+///
+/// The server has 3 neighbours: the top-of-rack switch, the outside world, and itself (for
+/// timeouts). Timeouts are particularly tricky in that they might not be monotonically
+/// scheduled... TBD
 pub struct Server {
-    server_id: usize,
+    id: usize,
+
+    latency_ns: u64,
+
+    id_to_ix: HashMap<usize, usize>,
+    ix_to_id: HashMap<usize, usize>,
+    next_ix: usize,
+
+    in_queues: Vec<Consumer<ModelEvent>>,
+    out_queues: Vec<Producer<ModelEvent>>,
+    out_times: Vec<u64>,
+
     //tor_link: Producer<ModelEvent>,
     //world_link: Producer<ModelEvent>,
     //self_link: Producer<Event<ModelEvent>>,
-    //flows: HashMap<usize, tcp::Flow>,
+    flows: HashMap<usize, tcp::Flow>,
+
+    count: u64,
 }
 
 impl Connectable for &mut Server {
     fn id(&self) -> usize {
-        self.server_id
+        self.id
     }
 
     fn flavor(&self) -> Device {
@@ -282,51 +304,172 @@ impl Connectable for &mut Server {
     }
 
     fn connect(&mut self, mut other: impl Connectable) {
-        let (prod, _) = spsc::new(128);
+        let (prod, cons) = spsc::new(128);
 
-        other.back_connect(&mut **self, prod);
+        self.id_to_ix.insert(other.id(), self.next_ix);
+        self.ix_to_id.insert(self.next_ix, other.id());
+
+        let tx_queue = (other).back_connect(&mut **self, prod);
+        self.out_queues.push(tx_queue);
+        self.in_queues.push(cons);
+        self.out_times.push(0);
+
+        self.next_ix += 1;
     }
 
     fn back_connect(
         &mut self,
-        _other: impl Connectable,
-        _tx_queue: Producer<ModelEvent>,
+        other: impl Connectable,
+        tx_queue: Producer<ModelEvent>,
     ) -> Producer<ModelEvent> {
-        let (prod, _) = spsc::new(128);
+        self.id_to_ix.insert(other.id(), self.next_ix);
+        self.ix_to_id.insert(self.next_ix, other.id());
+
+        self.out_queues.push(tx_queue);
+        self.out_times.push(0);
+        // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
+
+        let (prod, cons) = spsc::new(128);
+        self.in_queues.push(cons);
+
+        self.next_ix += 1;
 
         prod
     }
 }
 
 impl Server {
-    pub fn new(
-        server_id: usize,
-        //tor_link: Producer<ModelEvent>,
-        //world_link: Producer<ModelEvent>,
-    ) -> Server {
-        //let (self_link
+    pub fn new(id: usize) -> Server {
+        let mut id_to_ix = HashMap::new();
+        let mut ix_to_id = HashMap::new();
+
+        let mut in_queues = Vec::new();
+        let mut out_queues = Vec::new();
+
+        let mut out_times = Vec::new();
+
+
+        // self queue
+        let (self_prod, self_cons) = spsc::new(128);
+
+        id_to_ix.insert(id, 0);
+        ix_to_id.insert(0, id);
+        in_queues.push(self_cons);
+        out_queues.push(self_prod);
+
+        out_times.push(0);
+
         Server {
-            server_id,
-            //tor_link,
-            //world_link,
-            //self_link,
-            //flows: HashMap::new(),
+            id,
+
+            latency_ns: 10,
+
+            id_to_ix,
+            ix_to_id,
+            next_ix: 1,
+
+            in_queues,
+            out_queues,
+            out_times,
+
+            flows: HashMap::new(),
+
+            count: 0,
         }
     }
 
-    pub fn _receive_event(&mut self, _event: Event<ModelEvent>) {
-        /*
-        match event.event_type {
-            EventType::Flow(mut flow) => {
-                self.flows.insert(flow.flow_id, flow);
-                // TODO start flow
+    pub fn connect_world(&mut self) -> Producer<ModelEvent> {
+        // world queue
+        // TODO create a WORLD_ID thing
+        let (world_prod, world_cons) = spsc::new(128);
+
+        self.id_to_ix.insert(0, self.next_ix);
+        self.ix_to_id.insert(self.next_ix, 0);
+        self.in_queues.push(world_cons);
+
+        world_prod
+    }
+
+    pub fn start(mut self) -> u64 {
+        let merger = Merger::new(self.in_queues);
+
+        println!("Server starting... {:?}", self.id_to_ix);
+
+        for event in merger {
+            self.count += 1;
+            //println!("@{} event #{}", event.time, self.count);
+            match event.event_type {
+                EventType::Close => {
+                    // ensure everyone ignores us from now until close
+                    for dst_ix in 0..self.out_queues.len() {
+                        self.out_queues[dst_ix]
+                            .push(Event {
+                                event_type: EventType::Close,
+                                src: self.id,
+                                time: event.time + self.latency_ns,
+                            }) // add latency to avoid violating in-order invariant
+                            .unwrap();
+                    }
+
+                    break;
+                }
+
+                EventType::Stalled => {
+                    //println!("stall {:?}", self.out_times);
+                    // we don't need to tell world to move forward
+
+                    // TODO how on earth do we tell ourselves to move forward??
+                    // min timeout of 100us
+                    let self_time = self.out_times[0];
+                    if self_time <= event.time {
+                        //let cur_time = std::cmp::max(event.time, out_time);
+                        self.out_queues[0]
+                            .push(Event {
+                                event_type: EventType::Null,
+                                src: self.id,
+                                time: event.time + 10_000,
+                            })
+                            .unwrap();
+                        //self.count += 1;
+
+                        self.out_times[0] = event.time;
+                    }
+
+                    // ToR
+                    let out_time = self.out_times[1];
+                    // equal because they might just need a jog, blocking happens in the
+                    // iterator, so no infinite loop risk
+                    if out_time <= event.time {
+                        //let cur_time = std::cmp::max(event.time, out_time);
+                        self.out_queues[1]
+                            .push(Event {
+                                event_type: EventType::Null,
+                                src: self.id,
+                                time: event.time + self.latency_ns,
+                            })
+                            .unwrap();
+                        //self.count += 1;
+
+                        self.out_times[1] = event.time;
+                    }
+                }
+
+                EventType::Null => unreachable!(),
+
+                EventType::ModelEvent(net_event) => match net_event {
+                    NetworkEvent::Flow(flow) => {
+                        println!("flow");
+                        self.flows.insert(flow.flow_id, flow);
+                    }
+
+                    NetworkEvent::Packet(packet) => {
+                        println!("packet {:?}", packet);
+                    }
+                },
             }
-            EventType::Packet(mut packet) => {
-                println!("Received packet {:?}", packet);
-            }
-            _ => unreachable!(),
         }
-        println!("{:?} go", self.server_id);
-        */
+
+        println!("Server #{} done. {} pkts", self.id, self.count);
+        self.count
     }
 }
