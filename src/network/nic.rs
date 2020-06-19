@@ -6,12 +6,18 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::engine::*;
-use crate::network::tcp;
+//use crate::network::tcp;
 use crate::network::ModelEvent;
 use crate::network::NetworkEvent;
 
+pub enum Device {
+    Router,
+    Server,
+}
+
 pub trait Connectable {
     fn id(&self) -> usize;
+    fn flavor(&self) -> Device;
 
     fn connect(&mut self, other: impl Connectable);
     fn back_connect(
@@ -62,6 +68,10 @@ impl fmt::Display for Router {
 impl Connectable for &mut Router {
     fn id(&self) -> usize {
         self.id
+    }
+
+    fn flavor(&self) -> Device {
+        Device::Router
     }
 
     fn connect(&mut self, mut other: impl Connectable) {
@@ -254,33 +264,57 @@ impl Router {
     } // end start() function
 } // end NIC methods
 
-struct Server {
+pub struct Server {
     server_id: usize,
-
-    tor_link: Producer<ModelEvent>,
-    world_link: Producer<ModelEvent>,
+    //tor_link: Producer<ModelEvent>,
+    //world_link: Producer<ModelEvent>,
     //self_link: Producer<Event<ModelEvent>>,
-    flows: HashMap<usize, tcp::Flow>,
+    //flows: HashMap<usize, tcp::Flow>,
+}
+
+impl Connectable for &mut Server {
+    fn id(&self) -> usize {
+        self.server_id
+    }
+
+    fn flavor(&self) -> Device {
+        Device::Server
+    }
+
+    fn connect(&mut self, mut other: impl Connectable) {
+        let (prod, _) = spsc::new(128);
+
+        other.back_connect(&mut **self, prod);
+    }
+
+    fn back_connect(
+        &mut self,
+        _other: impl Connectable,
+        _tx_queue: Producer<ModelEvent>,
+    ) -> Producer<ModelEvent> {
+        let (prod, _) = spsc::new(128);
+
+        prod
+    }
 }
 
 impl Server {
-    fn _new(
+    pub fn new(
         server_id: usize,
-        tor_link: Producer<ModelEvent>,
-        world_link: Producer<ModelEvent>,
+        //tor_link: Producer<ModelEvent>,
+        //world_link: Producer<ModelEvent>,
     ) -> Server {
         //let (self_link
         Server {
             server_id,
-
-            tor_link,
-            world_link,
+            //tor_link,
+            //world_link,
             //self_link,
-            flows: HashMap::new(),
+            //flows: HashMap::new(),
         }
     }
 
-    fn _receive_event(&mut self, _event: Event<ModelEvent>) {
+    pub fn _receive_event(&mut self, _event: Event<ModelEvent>) {
         /*
         match event.event_type {
             EventType::Flow(mut flow) => {

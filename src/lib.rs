@@ -46,6 +46,9 @@ impl World {
             racks.push(r);
         }
 
+        let mut s = Server::new(99);
+        (&mut s).connect(racks.get_mut(0).unwrap());
+
         // flows
         for src in 1..n_racks + 1 {
             for dst in 1..n_racks + 1 {
