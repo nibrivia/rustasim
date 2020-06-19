@@ -396,7 +396,7 @@ impl Server {
             })
             .unwrap();
 
-        println!("Server starting... {:?}", self.id_to_ix);
+        println!("Server #{} starting... {:?}", self.id, self.id_to_ix);
 
         let mut tor_time = 0;
         let tor_q = &self.out_queues[1];

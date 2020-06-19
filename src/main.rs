@@ -9,7 +9,7 @@ fn main() {
     //                      s  ms  us  ns
     //let time_limit: u64 = 000_111_111_000;
 
-    let n_thread = 7;
+    let n_thread = 4;
 
     println!("Setup...");
     let world = World::new(n_thread);

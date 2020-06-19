@@ -48,9 +48,17 @@ impl World {
         }
 
         let mut servers = Vec::new();
+
+        // source under rack 0
         let mut s = Server::new(99);
         (&mut s).connect(racks.get_mut(0).unwrap());
+
+        // dest under rack 2
+        let mut d = Server::new(100);
+        (&mut d).connect(racks.get_mut(2).unwrap());
+
         servers.push(s);
+        servers.push(d);
 
         // flows
         for src in 1..n_racks + 1 {

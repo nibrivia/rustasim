@@ -59,6 +59,10 @@ impl Flow {
 
         (packets, Vec::new())
     }
+
+    pub fn timeout(&mut self, _timeout: u64) -> (Vec<Packet>, Vec<u64>) {
+        (vec![], vec![])
+    }
 }
 
 impl Iterator for Flow {
