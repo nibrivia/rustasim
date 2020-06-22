@@ -7,13 +7,44 @@ use std::collections::HashMap;
 
 type Network = HashMap<usize, Vec<usize>>;
 
-/// Given a list of edges, find the routing table for the given `id`
+/// Given `network` a map of nodes and their neighbours, find the routing table for the given `id`
 ///
 /// This assumes all the edges have the same weight and breaks ties arbitrarely. Eventually this
-/// probably should return the cost of the path and alternatives for equal-cost multi-path
+/// probably should return the cost of the path and alternatives for equal-cost multi-path.
+///
+/// The route to self can return arbitrary values, but will exist. Do not rely on it being 0.
+///
+/// # Examples
+/// ```
+/// use std::collections::HashMap;
+/// use rustasim::network::routing::route_id;
+/// // +-------+
+/// // |       |
+/// // 1 - 2 - 3 - 4
+/// let mut network = HashMap::new();
+/// network.insert(1, vec![2, 3]);
+/// network.insert(2, vec![1, 3]);
+/// network.insert(3, vec![1, 2, 4]);
+/// network.insert(4, vec![3]);
+///
+/// // route from 1
+/// let route = route_id(&network, 1);
+/// // assert_eq!(route[&1], 0);
+/// assert_eq!(route[&2], 2);
+/// assert_eq!(route[&3], 3);
+/// assert_eq!(route[&4], 3);
+///
+/// // route from 2
+/// let route = route_id(&network, 2);
+/// assert_eq!(route[&1], 1);
+/// // assert_eq!(route[&2], 0);
+/// assert_eq!(route[&3], 3);
+/// assert_eq!(route[&4], 3);
+/// ```
 pub fn route_id(network: &Network, source_id: usize) -> HashMap<usize, usize> {
+    // temporary map from id -> (next_hop, cost)
     let mut route_cost = HashMap::new();
-    route_cost.insert(source_id, (0, 0)); // self routing is weird...
+    route_cost.insert(source_id, (source_id, 0)); // self routing is weird...
 
     // initialize queeu with neighbours
     let mut queue = vec![];
@@ -42,6 +73,7 @@ pub fn route_id(network: &Network, source_id: usize) -> HashMap<usize, usize> {
         }
     }
 
+    // translate into a pure routing table, no more cost
     let mut route = HashMap::new();
     for (node, (hop, _)) in route_cost {
         route.insert(node, hop);
@@ -82,7 +114,7 @@ mod test {
         for (dst, next_hop) in route.iter() {
             // self routing is a little weird. let it be 0
             if *dst == source {
-                assert_eq!(*next_hop, 0, "Self routing should give 0, not {}", next_hop);
+                // assert_eq!(*next_hop, 0, "Self routing should give 0, not {}", next_hop);
                 continue;
             }
 
@@ -113,7 +145,7 @@ mod test {
 
         // there should be a destination for every element of the network
         basic_route_checks(&network, &route, 1);
-        assert_eq!(route[&1], 0);
+        // assert_eq!(route[&1], 0);
     }
 
     #[test]
@@ -127,7 +159,7 @@ mod test {
 
         // there should be a destination for every element of the network
         basic_route_checks(&network, &route, 1);
-        assert_eq!(route[&1], 0);
+        // assert_eq!(route[&1], 0);
         assert_eq!(route[&2], 2);
 
         // from 2
@@ -136,7 +168,7 @@ mod test {
         // there should be a destination for every element of the network
         basic_route_checks(&network, &route, 2);
         assert_eq!(route[&1], 1);
-        assert_eq!(route[&2], 0);
+        // assert_eq!(route[&2], 0);
     }
 
     #[test]
@@ -153,7 +185,7 @@ mod test {
 
         // there should be a destination for every element of the network
         basic_route_checks(&network, &route, 1);
-        assert_eq!(route[&1], 0);
+        // assert_eq!(route[&1], 0);
         assert_eq!(route[&2], 2);
         assert_eq!(route[&3], 2);
         assert_eq!(route[&4], 2);
@@ -164,7 +196,7 @@ mod test {
         // there should be a destination for every element of the network
         basic_route_checks(&network, &route, 2);
         assert_eq!(route[&1], 1);
-        assert_eq!(route[&2], 0);
+        // assert_eq!(route[&2], 0);
         assert_eq!(route[&3], 3);
         assert_eq!(route[&4], 3);
     }
@@ -185,7 +217,7 @@ mod test {
         let route = route_id(&network, 1);
         println!("Route[1]: {:#?}", route);
         basic_route_checks(&network, &route, 1);
-        assert_eq!(route[&1], 0);
+        // assert_eq!(route[&1], 0);
         assert_eq!(route[&2], 2);
         assert_eq!(route[&3], 3);
         assert_eq!(route[&4], 3);
@@ -195,7 +227,7 @@ mod test {
         println!("Route[2]: {:#?}", route);
         basic_route_checks(&network, &route, 2);
         assert_eq!(route[&1], 1);
-        assert_eq!(route[&2], 0);
+        // assert_eq!(route[&2], 0);
         assert_eq!(route[&3], 3);
         assert_eq!(route[&4], 3);
     }
@@ -214,7 +246,7 @@ mod test {
         let route = route_id(&network, 1);
         println!("Route[1]: {:#?}", route);
         basic_route_checks(&network, &route, 1);
-        assert_eq!(route[&1], 0);
+        // assert_eq!(route[&1], 0);
         assert_eq!(route[&2], 2);
         assert_eq!(route[&3], 3);
         assert_eq!(route[&4], 4);
@@ -252,7 +284,7 @@ mod test {
         let route = route_id(&network, 10);
         println!("Route[10]: {:#?}", route);
         basic_route_checks(&network, &route, 10);
-        assert_eq!(route[&10], 0); // self
+        // assert_eq!(route[&10], 0); // self
         assert_eq!(route[&11], 11); // my servers
         assert_eq!(route[&12], 12);
         assert_eq!(route[&13], 13);
@@ -283,7 +315,7 @@ mod test {
 
         assert_eq!(route[&30], 30);
         assert_eq!(route[&31], 30);
-        assert_eq!(route[&32], 0); // myself
+        // assert_eq!(route[&32], 0); // myself
         assert_eq!(route[&33], 30);
     }
 
