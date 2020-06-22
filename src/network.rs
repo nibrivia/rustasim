@@ -1,6 +1,7 @@
 //! Datacenter network model
 
 pub mod nic;
+pub mod routing;
 pub mod tcp;
 
 /// Datacenter network model events

@@ -69,7 +69,7 @@ impl World {
         }
 
         // flows
-        let f = Flow::new(99, 100, 40);
+        let f = Flow::new(99, 100, 4000000);
         chans[0]
             .push(Event {
                 src: 0,
@@ -78,7 +78,6 @@ impl World {
             })
             .unwrap();
 
-        /*
         for src in 1..n_racks + 1 {
             for dst in 1..n_racks + 1 {
                 // skip self->self
@@ -88,7 +87,7 @@ impl World {
                 //break;
 
                 // create flow
-                let f = Flow::new(src, dst, 40);
+                let f = Flow::new(src, dst, 10);
 
                 // schedule on source
                 let mut packets = Vec::new();
@@ -103,7 +102,6 @@ impl World {
                 dst_rack.init_queue(src, packets);
             }
         }
-        */
 
         // TODO backbone switches
 
