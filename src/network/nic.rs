@@ -159,15 +159,9 @@ impl Router {
 
         // TODO auto route
         // route is an id->ix structure
-        for dst in 0..41 {
-            if self.id_to_ix.contains_key(&dst) {
-                self.route.push(self.id_to_ix[&dst]);
-            } else {
-                self.route.push(0);
-            }
-        }
+        self.route.insert(0, 0);
 
-        println!("Router #{} starting...", self.id);
+        println!("Router #{} starting... route: {:?}", self.id, self.route);
 
         for event in merger {
             self.count += 1;
