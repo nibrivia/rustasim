@@ -57,7 +57,9 @@ impl Flow {
 
     pub fn src_receive(&mut self, _packet: Packet) -> (Vec<Packet>, Vec<u64>) {
         let mut packets = Vec::new();
-        packets.push(self.next().unwrap());
+        if let Some(p) = self.next() {
+            packets.push(p);
+        }
 
         (packets, Vec::new())
     }

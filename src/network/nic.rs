@@ -222,19 +222,49 @@ impl Router {
                         // this is only for servers, not routers
                         NetworkEvent::Flow(_flow) => unreachable!(),
 
-                        NetworkEvent::Packet(mut packet) => {
+                        NetworkEvent::Packet(packet) => {
                             //self.count += 1;
-                            //println!("\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m",
-                            //self.id+1, event.time, self.id, packet, event.src);
-                            if packet.dst == self.id {
+                            println!(
+                                "\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m",
+                                self.id + 1,
+                                event.time,
+                                self.id,
+                                packet,
+                                event.src
+                            );
+                            /*if packet.dst == self.id {
                                 // bounce!
                                 packet.dst = packet.src;
                                 packet.src = self.id;
-                            }
+                            }*/
 
-                            // who
-                            let next_hop_ix = self.route[packet.dst];
+                            // TODO who
+                            let next_hop_ix: usize = if packet.dst == 99 {
+                                if self.id == 1 {
+                                    self.id_to_ix[&99]
+                                } else {
+                                    self.id_to_ix[&1]
+                                }
+                            } else {
+                                if self.id == 3 {
+                                    self.id_to_ix[&100]
+                                } else {
+                                    self.id_to_ix[&3]
+                                }
+                            };
+
+                            //let next_hop_ix = self.route[packet.dst];
                             //let next_hop_ix = self.id_to_ix[&packet.dst];
+                            println!(
+                                "\x1b[0;3{}m@{} Router {} received {:?} from {} ->{} [{}]\x1b[0;00m",
+                                self.id + 1,
+                                event.time,
+                                self.id,
+                                packet,
+                                event.src,
+                                self.ix_to_id[&next_hop_ix],
+                                next_hop_ix,
+                            );
 
                             // when
                             let cur_time = std::cmp::max(event.time, self.out_times[next_hop_ix]);
@@ -473,7 +503,7 @@ impl Server {
                         }
 
                         NetworkEvent::Packet(mut packet) => {
-                            println!("packet {:?}", packet);
+                            println!("@{} Server #{} rx packet {:?}", event.time, self.id, packet);
 
                             if !packet.is_ack {
                                 // this is data, send ack back
