@@ -161,6 +161,8 @@ impl Router {
     /// The routing table should specify for each ID what is the ID of the next hop. There is no
     /// requirement for the next ID for the device's own ID.
     ///
+    /// **This function assumes that IDs start at 1 and are continuous from there.**
+    ///
     /// The motivation for an external routing is that it is significantly simpler than
     /// implementing a distributed routing algorithm. As the research might become more specific to
     /// routing, this function may loose its purpose
@@ -230,18 +232,14 @@ impl Router {
                 }
 
                 // This is a message from neighbour we were waiting on, it has served its purpose
-                EventType::Null => {
-                    //println!("@{} Router #{} got null from #{}",
-                    //event.time, self.id, self.ix_to_id[&event.src]);
-                    unreachable!();
-                }
+                EventType::Null => unreachable!(),
 
                 EventType::ModelEvent(model_event) => {
                     match model_event {
                         // this is only for servers, not routers
                         NetworkEvent::Flow(_flow) => unreachable!(),
 
-                        NetworkEvent::Packet(mut packet) => {
+                        NetworkEvent::Packet(packet) => {
                             //self.count += 1;
                             /*println!(
                                 "\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m",
@@ -251,25 +249,9 @@ impl Router {
                                 packet,
                                 event.src
                             );*/
-                            if packet.dst == self.id {
-                                // bounce!
-                                packet.dst = packet.src;
-                                packet.src = self.id;
-                            }
 
                             // Next step
                             let next_hop_ix = self.route[packet.dst];
-                            //let next_hop_ix = self.id_to_ix[&packet.dst];
-                            /*println!(
-                                "\x1b[0;3{}m@{} Router {} received {:?} from {} ->{} [{}]\x1b[0;00m",
-                                self.id + 1,
-                                event.time,
-                                self.id,
-                                packet,
-                                event.src,
-                                self.ix_to_id[&next_hop_ix],
-                                next_hop_ix,
-                            );*/
 
                             // when
                             let cur_time = std::cmp::max(event.time, self.out_times[next_hop_ix]);
@@ -291,7 +273,7 @@ impl Router {
                                 break;
                             }
 
-                            // do this after we send the event over
+                            // update our estimate of time
                             self.out_times[next_hop_ix] = tx_end;
                         } // end EventType::packet
                     }

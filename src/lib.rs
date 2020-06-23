@@ -109,17 +109,27 @@ impl World {
         }
 
         // Flows -----------------------------------------------
-        let src_id = (&mut servers[0]).id();
-        let dst_id = (&mut servers[servers_per_rack + 1]).id();
+        for src_ix in 0..servers.len() {
+            let src_id = (&mut servers[src_ix]).id();
 
-        let f = Flow::new(src_id, dst_id, 400);
-        chans[&src_id]
-            .push(Event {
-                src: 0,
-                time: 0,
-                event_type: EventType::ModelEvent(NetworkEvent::Flow(f)),
-            })
-            .unwrap();
+            for dst_ix in 0..servers.len() {
+                // skip self flows...
+                if src_ix == dst_ix {
+                    continue;
+                }
+
+                let dst_id = (&mut servers[dst_ix]).id();
+
+                let f = Flow::new(src_id, dst_id, 11);
+                chans[&src_id]
+                    .push(Event {
+                        src: 0,
+                        time: 0,
+                        event_type: EventType::ModelEvent(NetworkEvent::Flow(f)),
+                    })
+                    .unwrap();
+            }
+        }
 
         // return world
         World {
