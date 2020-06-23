@@ -38,7 +38,7 @@ impl World {
     /// Sets up a world ready for simulation
     pub fn new(n_racks: usize) -> World {
         // TODO pass as argument
-        let servers_per_rack = n_racks;
+        let servers_per_rack = n_racks - 1;
 
         // Use to keep track of ID numbers and make them continuous
         let mut next_id = 1;
@@ -120,7 +120,7 @@ impl World {
 
                 let dst_id = (&mut servers[dst_ix]).id();
 
-                let f = Flow::new(src_id, dst_id, 1000);
+                let f = Flow::new(src_id, dst_id, 100000000);
                 chans[&src_id]
                     .push(Event {
                         src: 0,
