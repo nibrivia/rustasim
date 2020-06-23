@@ -4,7 +4,7 @@
 //! engine](synchronizer/index.html) and the model. In general, the engine should be agnostic to
 //! the type of model being run, and should probably eventually be pulled out into its own crate.
 
-use crossbeam::queue::spsc::*;
+use crossbeam_queue::spsc::*;
 use std::thread;
 
 pub mod engine;

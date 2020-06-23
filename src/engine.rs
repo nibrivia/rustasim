@@ -16,7 +16,7 @@
 //!
 // TODO description of when the null-message should be sent and what it should look like
 
-use crossbeam::queue::spsc;
+use crossbeam_queue::spsc;
 use std::cmp::Ordering;
 use std::mem;
 
@@ -342,7 +342,7 @@ impl<U> Iterator for Merger<U> {
 #[cfg(test)]
 mod test_merger {
     use crate::engine::*;
-    use crossbeam::queue::spsc;
+    use crossbeam_queue::spsc;
     use std::{thread, time};
 
     #[derive(Debug)]

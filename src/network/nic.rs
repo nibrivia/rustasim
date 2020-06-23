@@ -1,7 +1,7 @@
 //! Deals with most of the IP-layerish things: routing, matching packets to flows...
 
-use crossbeam::queue::spsc;
-use crossbeam::queue::spsc::*;
+use crossbeam_queue::spsc;
+use crossbeam_queue::spsc::*;
 use std::collections::HashMap;
 use std::fmt;
 
