@@ -12,6 +12,7 @@ pub mod network;
 
 use crate::engine::*;
 use crate::network::nic::*;
+use crate::network::routing::Network;
 use crate::network::tcp::*;
 use crate::network::ModelEvent;
 use crate::network::NetworkEvent;
@@ -35,31 +36,61 @@ pub struct World {
 impl World {
     /// Sets up a world ready for simulation
     pub fn new(n_racks: usize) -> World {
-        // Create the racks and connect them all up
+        // TODO pass as argument
+        let servers_per_rack = n_racks;
+
+        // Use to keep track of ID numbers and make them continuous
+        let mut next_id = 1;
+        let mut network = Network::new();
+
+        // TODO backbone switches
+
+        // Racks -----------------------------------------------
         let mut racks: Vec<Router> = Vec::new();
 
-        for id in 1..n_racks + 1 {
-            let mut r = Router::new(id);
-            for id2 in 1..id {
-                let rack2 = racks.get_mut(id2 - 1).unwrap();
+        for _ in 0..n_racks {
+            let mut r = Router::new(next_id);
+            network.insert(next_id, vec![]);
+
+            // connect up with other racks
+            for rack2 in racks.iter_mut() {
+                // update our network matrix
+                network.get_mut(&next_id).unwrap().push(rack2.id());
+                network.get_mut(&rack2.id()).unwrap().push(next_id);
+
+                // connect the devices
                 (&mut r).connect(rack2);
             }
+
+            next_id += 1;
             racks.push(r);
         }
 
+        // Servers ---------------------------------------------
         let mut servers = Vec::new();
 
-        // source under rack 0
-        let mut s = Server::new(99);
-        (&mut s).connect(racks.get_mut(0).unwrap());
-        servers.push(s);
+        for rack_ix in 0..n_racks {
+            for _ in 0..servers_per_rack {
+                let mut s = Server::new(next_id);
+                network.insert(next_id, vec![]);
 
-        // dest under rack 2
-        let mut d = Server::new(100);
-        (&mut d).connect(racks.get_mut(2).unwrap());
-        servers.push(d);
+                // get the parent rack (needs to be done each time, ref is consumed by connect)
+                let rack = racks.get_mut(rack_ix).unwrap();
 
-        // conect world
+                // update network matrix
+                network.get_mut(&next_id).unwrap().push(rack.id());
+                network.get_mut(&rack.id()).unwrap().push(next_id);
+
+                // connect devices
+                (&mut s).connect(rack);
+
+                // push and consume
+                next_id += 1;
+                servers.push(s);
+            }
+        }
+
+        // World -----------------------------------------------
         let mut chans = Vec::new();
         for s in &mut servers {
             chans.push(s.connect_world());
@@ -68,8 +99,8 @@ impl World {
             chans.push(r.connect_world());
         }
 
-        // flows
-        let f = Flow::new(99, 100, 4000000);
+        // Flows -----------------------------------------------
+        let f = Flow::new(99, 100, 40000);
         chans[0]
             .push(Event {
                 src: 0,
@@ -102,8 +133,6 @@ impl World {
                 dst_rack.init_queue(src, packets);
             }
         }
-
-        // TODO backbone switches
 
         // return world
         World {

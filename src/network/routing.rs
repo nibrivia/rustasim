@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-type Network = HashMap<usize, Vec<usize>>;
+pub type Network = HashMap<usize, Vec<usize>>;
 
 /// Given `network` a map of nodes and their neighbours, find the routing table for the given `id`
 ///
@@ -18,6 +18,7 @@ type Network = HashMap<usize, Vec<usize>>;
 /// ```
 /// use std::collections::HashMap;
 /// use rustasim::network::routing::route_id;
+///
 /// // +-------+
 /// // |       |
 /// // 1 - 2 - 3 - 4
