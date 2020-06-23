@@ -57,7 +57,7 @@ pub struct Router {
     out_times: Vec<u64>,
 
     // Route should eventually be turned into a vec
-    route: HashMap<usize, usize>,
+    route: Vec<usize>,
 
     // stats
     count: u64,
@@ -131,7 +131,7 @@ impl Router {
             out_queues: Vec::new(),
             out_times: Vec::new(),
 
-            route: HashMap::new(),
+            route: Vec::new(),
 
             count: 0,
         }
@@ -165,11 +165,15 @@ impl Router {
     /// implementing a distributed routing algorithm. As the research might become more specific to
     /// routing, this function may loose its purpose
     pub fn install_routes(&mut self, routes: HashMap<usize, usize>) {
-        for (dst_id, next_hop_id) in routes {
-            let next_hop_ix = self.id_to_ix[&next_hop_id];
+        //for (dst_id, next_hop_id) in routes {
+        self.route = vec![0];
+
+        for dst_id in 1..routes.len() + 1 {
+            let next_hop_id = routes[&dst_id];
 
             // the self.route is an id->ix structure
-            self.route.insert(dst_id, next_hop_ix);
+            let next_hop_ix = self.id_to_ix.get(&next_hop_id).unwrap_or(&0);
+            self.route.push(*next_hop_ix);
         }
     }
 
@@ -178,7 +182,7 @@ impl Router {
     /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
     /// This will almost certainly change to a function with no return value in the near future.
     pub fn start(mut self) -> u64 {
-        println!("Router #{} starting... route: {:?}", self.id, self.route);
+        println!("Router #{} starting...", self.id);
 
         // build the event merger
         let merger = Merger::new(self.in_queues);
@@ -253,24 +257,8 @@ impl Router {
                                 packet.src = self.id;
                             }
 
-                            // TODO who
-                            let next_hop_ix: usize = if packet.dst == 99 {
-                                if self.id == 1 {
-                                    self.id_to_ix[&99]
-                                } else {
-                                    self.id_to_ix[&1]
-                                }
-                            } else if packet.dst == 100 {
-                                if self.id == 3 {
-                                    self.id_to_ix[&100]
-                                } else {
-                                    self.id_to_ix[&3]
-                                }
-                            } else {
-                                self.id_to_ix[&packet.dst]
-                            };
-
-                            //let next_hop_ix = self.route[packet.dst];
+                            // Next step
+                            let next_hop_ix = self.route[packet.dst];
                             //let next_hop_ix = self.id_to_ix[&packet.dst];
                             /*println!(
                                 "\x1b[0;3{}m@{} Router {} received {:?} from {} ->{} [{}]\x1b[0;00m",
@@ -450,7 +438,7 @@ impl Server {
             })
             .unwrap();
 
-        println!("Server #{} starting... {:?}", self.id, self.id_to_ix);
+        println!("Server #{} starting...", self.id);
 
         let mut tor_time = 0;
         let tor_q = &self.out_queues[1];

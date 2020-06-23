@@ -5,6 +5,7 @@
 //! the type of model being run, and should probably eventually be pulled out into its own crate.
 
 use crossbeam_queue::spsc::*;
+use std::collections::HashMap;
 use std::thread;
 
 pub mod engine;
@@ -12,7 +13,7 @@ pub mod network;
 
 use crate::engine::*;
 use crate::network::nic::*;
-use crate::network::routing::Network;
+use crate::network::routing::{route_id, Network};
 use crate::network::tcp::*;
 use crate::network::ModelEvent;
 use crate::network::NetworkEvent;
@@ -23,7 +24,7 @@ pub struct World {
     servers: Vec<Server>,
 
     /// Communication channels from us (the world) to the actors
-    chans: Vec<Producer<ModelEvent>>,
+    chans: HashMap<usize, Producer<ModelEvent>>,
 }
 
 /// Main simulation object.
@@ -90,49 +91,35 @@ impl World {
             }
         }
 
+        // Routing ---------------------------------------------
+        for r in racks.iter_mut() {
+            let rack_id = r.id();
+
+            let routes = route_id(&network, rack_id);
+            r.install_routes(routes);
+        }
+
         // World -----------------------------------------------
-        let mut chans = Vec::new();
+        let mut chans = HashMap::new();
         for s in &mut servers {
-            chans.push(s.connect_world());
+            chans.insert(s.id(), s.connect_world());
         }
         for r in &mut racks {
-            chans.push(r.connect_world());
+            chans.insert(r.id(), r.connect_world());
         }
 
         // Flows -----------------------------------------------
-        let f = Flow::new(99, 100, 40000);
-        chans[0]
+        let src_id = (&mut servers[0]).id();
+        let dst_id = (&mut servers[servers_per_rack + 1]).id();
+
+        let f = Flow::new(src_id, dst_id, 400);
+        chans[&src_id]
             .push(Event {
                 src: 0,
                 time: 0,
                 event_type: EventType::ModelEvent(NetworkEvent::Flow(f)),
             })
             .unwrap();
-
-        for src in 1..n_racks + 1 {
-            for dst in 1..n_racks + 1 {
-                // skip self->self
-                if src == dst {
-                    continue;
-                }
-                //break;
-
-                // create flow
-                let f = Flow::new(src, dst, 10);
-
-                // schedule on source
-                let mut packets = Vec::new();
-                for packet in f {
-                    packets.push(Event {
-                        src: dst,
-                        time: 0,
-                        event_type: EventType::ModelEvent(NetworkEvent::Packet(packet)),
-                    });
-                }
-                let dst_rack = racks.get_mut(dst - 1).unwrap();
-                dst_rack.init_queue(src, packets);
-            }
-        }
 
         // return world
         World {
@@ -147,7 +134,7 @@ impl World {
     /// This will spawn a thread per actor and wait for all of them to end.
     pub fn start(mut self, done: u64) -> Vec<u64> {
         // Tell everyone when the end is
-        for c in self.chans.iter_mut() {
+        for (_, c) in self.chans.iter_mut() {
             c.push(Event {
                 time: done,
                 src: 0,
