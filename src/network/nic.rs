@@ -178,12 +178,12 @@ impl Router {
     /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
     /// This will almost certainly change to a function with no return value in the near future.
     pub fn start(mut self) -> u64 {
-        let merger = Merger::new(self.in_queues);
-
-        // TODO auto route
-
         println!("Router #{} starting... route: {:?}", self.id, self.route);
 
+        // build the event merger
+        let merger = Merger::new(self.in_queues);
+
+        // main loop :)
         for event in merger {
             self.count += 1;
             match event.event_type {
