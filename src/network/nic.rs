@@ -56,8 +56,8 @@ pub struct Router {
     out_queues: Vec<Producer<ModelEvent>>,
     out_times: Vec<u64>,
 
-    // networking things
-    route: Vec<usize>,
+    // Route should eventually be turned into a vec
+    route: HashMap<usize, usize>,
 
     // stats
     count: u64,
@@ -116,6 +116,7 @@ impl Connectable for &mut Router {
 }
 
 impl Router {
+    // TODO document
     pub fn new(id: usize) -> Router {
         Router {
             id,
@@ -126,17 +127,17 @@ impl Router {
             ix_to_id: HashMap::new(),
             next_ix: 0,
 
-            //event_receiver: EventScheduler::new(id),
             in_queues: Vec::new(),
             out_queues: Vec::new(),
             out_times: Vec::new(),
-            //out_notify : HashMap::new(),
-            route: Vec::new(),
+
+            route: HashMap::new(),
 
             count: 0,
         }
     }
 
+    // TODO remove?
     pub fn init_queue(&mut self, dst: usize, events: Vec<ModelEvent>) {
         let dst_ix = self.id_to_ix[&dst];
         for e in events {
@@ -145,6 +146,7 @@ impl Router {
     }
 
     // needs to be called last
+    // TODO document
     pub fn connect_world(&mut self) -> Producer<ModelEvent> {
         self.id_to_ix.insert(0, self.next_ix);
 
@@ -154,12 +156,31 @@ impl Router {
         prod
     }
 
+    /// Installs an externally computed routing table
+    ///
+    /// The routing table should specify for each ID what is the ID of the next hop. There is no
+    /// requirement for the next ID for the device's own ID.
+    ///
+    /// The motivation for an external routing is that it is significantly simpler than
+    /// implementing a distributed routing algorithm. As the research might become more specific to
+    /// routing, this function may loose its purpose
+    pub fn install_routes(&mut self, routes: HashMap<usize, usize>) {
+        for (dst_id, next_hop_id) in routes {
+            let next_hop_ix = self.id_to_ix[&next_hop_id];
+
+            // the self.route is an id->ix structure
+            self.route.insert(dst_id, next_hop_ix);
+        }
+    }
+
+    /// Starts the rack, consumes the object
+    ///
+    /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
+    /// This will almost certainly change to a function with no return value in the near future.
     pub fn start(mut self) -> u64 {
         let merger = Merger::new(self.in_queues);
 
         // TODO auto route
-        // route is an id->ix structure
-        self.route.insert(0, 0);
 
         println!("Router #{} starting... route: {:?}", self.id, self.route);
 
@@ -363,6 +384,7 @@ impl Connectable for &mut Server {
 }
 
 impl Server {
+    // TODO document
     pub fn new(id: usize) -> Server {
         let mut id_to_ix = HashMap::new();
         let mut ix_to_id = HashMap::new();
@@ -401,6 +423,7 @@ impl Server {
         }
     }
 
+    // TODO document
     pub fn connect_world(&mut self) -> Producer<ModelEvent> {
         // world queue
         // TODO create a WORLD_ID thing
@@ -413,6 +436,10 @@ impl Server {
         world_prod
     }
 
+    /// Starts the server, consuming it
+    ///
+    /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
+    /// This will almost certainly change to a function with no return value in the near future.
     pub fn start(mut self) -> u64 {
         // FIXME timeouts not yet implemented, let's keep this channel inactive
         self.out_queues[0]
