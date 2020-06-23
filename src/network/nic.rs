@@ -16,6 +16,8 @@ pub enum Device {
     Server,
 }
 
+const Q_SIZE: usize = 12800;
+
 /// A standard interface for connecting devices of all types
 // TODO change this API, connect(a, b) function, connectable just has functions for giving and
 // getting queues.
@@ -79,7 +81,7 @@ impl Connectable for &mut Router {
     }
 
     fn connect(&mut self, mut other: impl Connectable) {
-        let (prod, cons) = spsc::new(128);
+        let (prod, cons) = spsc::new(Q_SIZE);
 
         self.id_to_ix.insert(other.id(), self.next_ix);
         self.ix_to_id.insert(self.next_ix, other.id());
@@ -106,7 +108,7 @@ impl Connectable for &mut Router {
         self.out_times.push(0);
         // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
 
-        let (prod, cons) = spsc::new(128);
+        let (prod, cons) = spsc::new(Q_SIZE);
         self.in_queues.push(cons);
 
         self.next_ix += 1;
@@ -150,7 +152,7 @@ impl Router {
     pub fn connect_world(&mut self) -> Producer<ModelEvent> {
         self.id_to_ix.insert(0, self.next_ix);
 
-        let (prod, cons) = spsc::new(128);
+        let (prod, cons) = spsc::new(Q_SIZE);
         self.in_queues.push(cons);
 
         prod
@@ -158,10 +160,10 @@ impl Router {
 
     /// Installs an externally computed routing table
     ///
+    /// **This function assumes that IDs start at 1 and are continuous from there.**
+    ///
     /// The routing table should specify for each ID what is the ID of the next hop. There is no
     /// requirement for the next ID for the device's own ID.
-    ///
-    /// **This function assumes that IDs start at 1 and are continuous from there.**
     ///
     /// The motivation for an external routing is that it is significantly simpler than
     /// implementing a distributed routing algorithm. As the research might become more specific to
@@ -322,7 +324,7 @@ impl Connectable for &mut Server {
     }
 
     fn connect(&mut self, mut other: impl Connectable) {
-        let (prod, cons) = spsc::new(128);
+        let (prod, cons) = spsc::new(Q_SIZE);
 
         self.id_to_ix.insert(other.id(), self.next_ix);
         self.ix_to_id.insert(self.next_ix, other.id());
@@ -344,7 +346,7 @@ impl Connectable for &mut Server {
 
         self.out_queues.push(tx_queue);
 
-        let (prod, cons) = spsc::new(128);
+        let (prod, cons) = spsc::new(Q_SIZE);
         self.in_queues.push(cons);
 
         self.next_ix += 1;
@@ -365,7 +367,7 @@ impl Server {
         let mut out_times = Vec::new();
 
         // self queue
-        let (self_prod, self_cons) = spsc::new(128);
+        let (self_prod, self_cons) = spsc::new(Q_SIZE);
 
         id_to_ix.insert(id, 0);
         ix_to_id.insert(0, id);
@@ -397,7 +399,7 @@ impl Server {
     pub fn connect_world(&mut self) -> Producer<ModelEvent> {
         // world queue
         // TODO create a WORLD_ID thing
-        let (world_prod, world_cons) = spsc::new(128);
+        let (world_prod, world_cons) = spsc::new(Q_SIZE);
 
         self.id_to_ix.insert(0, self.next_ix);
         self.ix_to_id.insert(self.next_ix, 0);

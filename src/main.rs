@@ -9,15 +9,21 @@ fn main() {
     //                      s  ms  us  ns
     //let time_limit: u64 = 000_111_111_000;
 
-    let n_thread = 2;
+    let n_racks = 2;
 
     println!("Setup...");
-    let world = World::new(n_thread);
+    let world = World::new(n_racks);
 
     println!("Run...");
     let start = Instant::now();
     let counts = world.start(time_limit);
     let duration = start.elapsed();
+
+    let n_thread = counts.len();
+
+    // each ToR sends to n_racks-1 racks and n_racks servers
+    // each server (n_racks^2) is connected to 1 ToR
+    let n_links = (n_racks * (n_racks - 1 + n_racks) + n_racks) as u64;
 
     // stats...
     let sum_count = counts.iter().sum::<u64>();
@@ -27,9 +33,9 @@ fn main() {
         0
     };
 
-    let gbps = ((n_thread * (n_thread - 1) * 8) as f64) * (time_limit as f64)
-        / 1e9
-        / duration.as_secs_f64();
+    // each link is 8Gbps, time_limit/1e9 is in seconds which is how much we simulated
+    // divide by the time it took us -> simulation bandwidth
+    let gbps = (n_links * 8 * time_limit) as f64 / 1e9 / duration.as_secs_f64();
 
     println!("= {} / {}s", sum_count, duration.as_secs_f32());
     println!(

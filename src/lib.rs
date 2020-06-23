@@ -120,7 +120,7 @@ impl World {
 
                 let dst_id = (&mut servers[dst_ix]).id();
 
-                let f = Flow::new(src_id, dst_id, 11);
+                let f = Flow::new(src_id, dst_id, 1000);
                 chans[&src_id]
                     .push(Event {
                         src: 0,
