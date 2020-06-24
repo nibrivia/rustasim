@@ -8,7 +8,11 @@ use crossbeam_queue::spsc::*;
 use std::collections::HashMap;
 use std::thread;
 
+use slog::*;
+use slog_async;
+
 pub mod engine;
+pub mod logger;
 pub mod network;
 
 use crate::engine::*;
@@ -153,13 +157,42 @@ impl World {
             .unwrap();
         }
 
+        // TODO think about where this should be
+        // logger
+        let log_path = "out.log";
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(log_path)
+            .unwrap();
+
+        //let decorator = slog_term::PlainDecorator::new(file);
+        //let drain = slog_term::FullFormat::new(decorator).build().fuse();
+        //let drain = slog_json::Json::new(file).build().fuse();
+        let drain = logger::MsgLogger::new(file).fuse();
+        let drain = slog_async::Async::new(drain)
+            .overflow_strategy(slog_async::OverflowStrategy::Block)
+            .build()
+            .fuse();
+
+        let log = Logger::root(drain.fuse(), o!());
+
+        info!(log, "time, id, src, type");
+
         // Start each rack in its own thread
         let mut handles = Vec::new();
         for r in self.racks {
-            handles.push(thread::spawn(move || r.start()));
+            handles.push(thread::spawn({
+                let log = log.clone();
+                move || r.start(log)
+            }));
         }
         for s in self.servers {
-            handles.push(thread::spawn(move || s.start()));
+            handles.push(thread::spawn({
+                let log = log.clone();
+                move || s.start(log)
+            }));
         }
 
         // Get the results

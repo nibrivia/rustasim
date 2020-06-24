@@ -17,6 +17,7 @@
 // TODO description of when the null-message should be sent and what it should look like
 
 use crossbeam_queue::spsc;
+use slog::*;
 use std::cmp::Ordering;
 use std::mem;
 
@@ -92,6 +93,8 @@ impl<U> Eq for Event<U> {}
 /// or from the Merger itself upon a potential Stall.
 #[derive(Debug)]
 pub struct Merger<U> {
+    id: usize,
+
     // the input queues
     in_queues: Vec<spsc::Consumer<Event<U>>>,
     n_layers: usize,
@@ -105,6 +108,10 @@ pub struct Merger<U> {
 
     // the loser queue
     loser_e: Vec<Event<U>>,
+
+    // logger
+    log: slog::Logger,
+    ix_to_id: Vec<usize>,
 }
 
 /// Returns indices into an 1-indexed array a tree with `n_nodes` leaves from left-to-right.
@@ -177,9 +184,17 @@ fn ltr_walk(n_nodes: usize) -> Vec<usize> {
     indices
 }
 
-impl<U> Merger<U> {
+impl<U> Merger<U>
+where
+    U: std::fmt::Debug,
+{
     /// Builds a new merger from a set of input queues
-    pub fn new(in_queues: Vec<spsc::Consumer<Event<U>>>) -> Merger<U> {
+    pub fn new(
+        in_queues: Vec<spsc::Consumer<Event<U>>>,
+        id: usize,
+        ix_to_id: Vec<usize>,
+        log: slog::Logger,
+    ) -> Merger<U> {
         let mut loser_e = Vec::new();
         let winner_q = 0;
 
@@ -244,6 +259,8 @@ impl<U> Merger<U> {
         }
 
         Merger {
+            id,
+
             in_queues,
             n_layers,
 
@@ -254,6 +271,9 @@ impl<U> Merger<U> {
             paths,
 
             loser_e,
+
+            log,
+            ix_to_id,
         }
     }
 
@@ -267,7 +287,10 @@ impl<U> Merger<U> {
     }
 }
 
-impl<U> Iterator for Merger<U> {
+impl<U> Iterator for Merger<U>
+where
+    U: std::fmt::Debug,
+{
     type Item = Event<U>;
 
     // blocks until it has something to return
@@ -287,11 +310,11 @@ impl<U> Iterator for Merger<U> {
                     if !self.stalled {
                         // return Stalled event
                         self.stalled = true;
-                        return Some(Event {
+                        Event {
                             time: self.safe_time,
                             src: self.winner_q,
                             event_type: EventType::Stalled,
-                        });
+                        }
                     } else {
                         // blocking wait
                         q.wait();
@@ -329,6 +352,15 @@ impl<U> Iterator for Merger<U> {
             // We need this to return events even if we don't have new events coming in...
             self.safe_time = new_winner_e.time;
 
+            trace!(
+                self.log,
+                "{},{},{},{:?}",
+                new_winner_e.time,
+                self.id,
+                self.ix_to_id[new_winner_e.src],
+                new_winner_e.event_type,
+            );
+
             // Null events are only useful for us
             if let EventType::Null = new_winner_e.event_type {
                 continue;
@@ -339,6 +371,7 @@ impl<U> Iterator for Merger<U> {
     }
 }
 
+/*
 #[cfg(test)]
 mod test_merger {
     use crate::engine::*;
@@ -557,3 +590,4 @@ mod test_merger {
         handle.join().unwrap();
     }
 }
+*/

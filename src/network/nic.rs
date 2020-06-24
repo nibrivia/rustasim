@@ -2,6 +2,7 @@
 
 use crossbeam_queue::spsc;
 use crossbeam_queue::spsc::*;
+use slog::*;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -11,6 +12,7 @@ use crate::network::ModelEvent;
 use crate::network::NetworkEvent;
 
 /// Device types
+#[derive(Debug)]
 pub enum Device {
     Router,
     Server,
@@ -49,7 +51,7 @@ pub struct Router {
     ns_per_byte: u64,
 
     id_to_ix: HashMap<usize, usize>,
-    ix_to_id: HashMap<usize, usize>,
+    ix_to_id: Vec<usize>,
     next_ix: usize,
 
     // event management
@@ -84,7 +86,7 @@ impl Connectable for &mut Router {
         let (prod, cons) = spsc::new(Q_SIZE);
 
         self.id_to_ix.insert(other.id(), self.next_ix);
-        self.ix_to_id.insert(self.next_ix, other.id());
+        self.ix_to_id.push(other.id());
 
         let tx_queue = (other).back_connect(&mut **self, prod);
         self.out_queues.push(tx_queue);
@@ -102,7 +104,7 @@ impl Connectable for &mut Router {
         tx_queue: Producer<ModelEvent>,
     ) -> Producer<ModelEvent> {
         self.id_to_ix.insert(other.id(), self.next_ix);
-        self.ix_to_id.insert(self.next_ix, other.id());
+        self.ix_to_id.push(other.id());
 
         self.out_queues.push(tx_queue);
         self.out_times.push(0);
@@ -126,7 +128,7 @@ impl Router {
             ns_per_byte: 1,
 
             id_to_ix: HashMap::new(),
-            ix_to_id: HashMap::new(),
+            ix_to_id: Vec::new(),
             next_ix: 0,
 
             in_queues: Vec::new(),
@@ -154,6 +156,7 @@ impl Router {
 
         let (prod, cons) = spsc::new(Q_SIZE);
         self.in_queues.push(cons);
+        self.ix_to_id.push(0);
 
         prod
     }
@@ -185,11 +188,17 @@ impl Router {
     ///
     /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
     /// This will almost certainly change to a function with no return value in the near future.
-    pub fn start(mut self) -> u64 {
-        println!("Router #{} starting...", self.id);
+    pub fn start(mut self, log: slog::Logger) -> u64 {
+        let log = log.new(o!("Router" => self.id));
+        //info!(log, "start...");
 
         // build the event merger
-        let merger = Merger::new(self.in_queues);
+        let mut v = Vec::new();
+        for id in &self.ix_to_id {
+            v.push(*id);
+        }
+
+        let merger = Merger::new(self.in_queues, self.id, v, log);
 
         // main loop :)
         for event in merger {
@@ -217,7 +226,7 @@ impl Router {
                         let out_time = self.out_times[dst_ix];
                         // equal because they might just need a jog, blocking happens in the
                         // iterator, so no infinite loop risk
-                        if out_time <= event.time {
+                        if out_time == 0 || out_time < event.time {
                             //let cur_time = std::cmp::max(event.time, out_time);
                             self.out_queues[dst_ix]
                                 .push(Event {
@@ -226,7 +235,7 @@ impl Router {
                                     time: event.time + self.latency_ns,
                                 })
                                 .unwrap();
-                            //self.count += 1;
+                            self.count += 1;
 
                             self.out_times[dst_ix] = event.time;
                         }
@@ -270,7 +279,7 @@ impl Router {
                             }) {
                                 println!(
                                     "@{} Router #{} push error to #{}: {:?}",
-                                    event.time, self.id, self.ix_to_id[&next_hop_ix], e
+                                    event.time, self.id, self.ix_to_id[next_hop_ix], e
                                 );
                                 break;
                             }
@@ -283,7 +292,7 @@ impl Router {
             } // end match
         } // end for loop
 
-        println!("Router #{} done. {} pkts", self.id, self.count);
+        //info!(log, "Router #{} done. {} pkts", self.id, self.count);
         self.count
     } // end start() function
 } // end NIC methods
@@ -300,7 +309,7 @@ pub struct Server {
     latency_ns: u64,
 
     id_to_ix: HashMap<usize, usize>,
-    ix_to_id: HashMap<usize, usize>,
+    ix_to_id: Vec<usize>,
     next_ix: usize,
 
     in_queues: Vec<Consumer<ModelEvent>>,
@@ -327,7 +336,7 @@ impl Connectable for &mut Server {
         let (prod, cons) = spsc::new(Q_SIZE);
 
         self.id_to_ix.insert(other.id(), self.next_ix);
-        self.ix_to_id.insert(self.next_ix, other.id());
+        self.ix_to_id.push(other.id());
 
         let tx_queue = (other).back_connect(&mut **self, prod);
         self.out_queues.push(tx_queue);
@@ -342,7 +351,7 @@ impl Connectable for &mut Server {
         tx_queue: Producer<ModelEvent>,
     ) -> Producer<ModelEvent> {
         self.id_to_ix.insert(other.id(), self.next_ix);
-        self.ix_to_id.insert(self.next_ix, other.id());
+        self.ix_to_id.push(other.id());
 
         self.out_queues.push(tx_queue);
 
@@ -359,7 +368,7 @@ impl Server {
     // TODO document
     pub fn new(id: usize) -> Server {
         let mut id_to_ix = HashMap::new();
-        let mut ix_to_id = HashMap::new();
+        let mut ix_to_id = Vec::new();
 
         let mut in_queues = Vec::new();
         let mut out_queues = Vec::new();
@@ -402,7 +411,7 @@ impl Server {
         let (world_prod, world_cons) = spsc::new(Q_SIZE);
 
         self.id_to_ix.insert(0, self.next_ix);
-        self.ix_to_id.insert(self.next_ix, 0);
+        self.ix_to_id.push(0);
         self.in_queues.push(world_cons);
 
         world_prod
@@ -412,7 +421,9 @@ impl Server {
     ///
     /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
     /// This will almost certainly change to a function with no return value in the near future.
-    pub fn start(mut self) -> u64 {
+    pub fn start(mut self, log: slog::Logger) -> u64 {
+        let log = log.new(o!("Server" => self.id));
+
         // FIXME timeouts not yet implemented, let's keep this channel inactive
         self.out_queues[0]
             .push(Event {
@@ -422,13 +433,18 @@ impl Server {
             })
             .unwrap();
 
-        println!("Server #{} starting...", self.id);
+        //info!(log, "start...");
 
         let mut tor_time = 0;
         let tor_q = &self.out_queues[1];
         //let mut self_time = 0;
 
-        let merger = Merger::new(self.in_queues);
+        let mut v = Vec::new();
+        for id in &self.ix_to_id {
+            v.push(*id);
+        }
+        let merger = Merger::new(self.in_queues, self.id, v, log);
+
         for event in merger {
             self.count += 1;
             //println!("@{} event #{}", event.time, self.count);
@@ -470,7 +486,7 @@ impl Server {
                     // ToR
                     // equal because they might just need a jog, blocking happens in the
                     // iterator, so no infinite loop risk
-                    if tor_time <= event.time {
+                    if tor_time < event.time {
                         //let cur_time = std::cmp::max(event.time, out_time);
                         tor_q
                             .push(Event {
@@ -479,7 +495,7 @@ impl Server {
                                 time: event.time + self.latency_ns,
                             })
                             .unwrap();
-                        //self.count += 1;
+                        self.count += 1;
 
                         tor_time = event.time;
                     }
@@ -542,7 +558,7 @@ impl Server {
             }
         }
 
-        println!("Server #{} done. {} pkts", self.id, self.count);
+        //info!(log, "Server #{} done. {} pkts", self.id, self.count);
         self.count
     }
 }
