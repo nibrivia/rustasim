@@ -1,4 +1,6 @@
 /target
+.Rhistory
+*.log
 Session.vim
 *.svg
 perf.*
