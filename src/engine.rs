@@ -20,6 +20,7 @@ use crossbeam_queue::spsc;
 use slog::*;
 use std::cmp::Ordering;
 use std::mem;
+use std::time::Instant;
 
 /// Event types and their associated data.
 ///
@@ -64,6 +65,7 @@ pub enum EventType<U> {
 #[derive(Debug)]
 pub struct Event<U> {
     pub time: u64,
+    pub real_time: u128,
     pub src: usize,
     pub event_type: EventType<U>,
 }
@@ -94,6 +96,7 @@ impl<U> Eq for Event<U> {}
 #[derive(Debug)]
 pub struct Merger<U> {
     id: usize,
+    start: Instant,
 
     // the input queues
     in_queues: Vec<spsc::Consumer<Event<U>>>,
@@ -194,6 +197,7 @@ where
         id: usize,
         ix_to_id: Vec<usize>,
         log: slog::Logger,
+        start: Instant,
     ) -> Merger<U> {
         let mut loser_e = Vec::new();
         let winner_q = 0;
@@ -201,6 +205,7 @@ where
         // index 0 never gets used
         loser_e.push(Event {
             time: 0,
+            real_time: 0,
             event_type: EventType::Null,
             src: 0,
         });
@@ -210,6 +215,7 @@ where
         for i in 1..in_queues.len() {
             loser_e.push(Event {
                 time: 0,
+                real_time: 0,
                 event_type: EventType::Null,
                 src: i,
             });
@@ -219,6 +225,7 @@ where
         for (loser, ix) in ltr_walk(in_queues.len()).iter().enumerate() {
             loser_e[*ix] = Event {
                 time: 0,
+                real_time: 0,
                 event_type: EventType::Null,
                 src: loser + 1,
             };
@@ -260,6 +267,7 @@ where
 
         Merger {
             id,
+            start,
 
             in_queues,
             n_layers,
@@ -310,11 +318,12 @@ where
                     if !self.stalled {
                         // return Stalled event
                         self.stalled = true;
-                        Event {
+                        return Some(Event {
                             time: self.safe_time,
+                            real_time: self.start.elapsed().as_nanos(),
                             src: self.winner_q,
                             event_type: EventType::Stalled,
-                        }
+                        });
                     } else {
                         // blocking wait
                         q.wait();
@@ -354,7 +363,8 @@ where
 
             trace!(
                 self.log,
-                "{},{},{},{:?}",
+                "{},{},{},{},{:?}",
+                new_winner_e.real_time,
                 new_winner_e.time,
                 self.id,
                 self.ix_to_id[new_winner_e.src],

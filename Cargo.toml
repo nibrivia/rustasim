@@ -9,12 +9,13 @@ repository = "https://github.com/nibrivia/rustasim"
 [dependencies]
 #crossbeam-queue = { git = "https://github.com/nibrivia/crossbeam.git" , branch = "wait" }
 crossbeam-queue = { path = "/home/nibr/crossbeam/crossbeam-queue" }
+chrono = "0.4"
 slog-async = "2.5.0"
 slog-json = "2.3.0"
 
 [dependencies.slog]
 version = "2.5.2"
-features = ["max_level_trace", "release_max_level_trace"]
+features = ["max_level_trace", "release_max_level_error"]
 
 [profile.release]
 debug = true

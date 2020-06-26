@@ -4,10 +4,12 @@ use slog::Record;
 
 use std::cell::RefCell;
 use std::io;
+use std::time::Instant;
 
 /// Attempt to write a *very* simple logger
 pub struct MsgLogger<W: io::Write> {
     io: RefCell<W>,
+    pub start: Instant,
 }
 
 impl<W> MsgLogger<W>
@@ -17,6 +19,7 @@ where
     pub fn new(io: W) -> MsgLogger<W> {
         MsgLogger {
             io: RefCell::new(io),
+            start: Instant::now(),
         }
     }
 }
@@ -30,10 +33,19 @@ where
 
     fn log(&self, rinfo: &Record, _logger_values: &OwnedKVList) -> io::Result<()> {
         let mut io = self.io.borrow_mut();
-        write!(io, "{}\n", rinfo.msg())?;
+        if rinfo.level() == slog::Level::Trace {
+            write!(
+                io,
+                "{},{}\n",
+                self.start.elapsed().as_nanos(),
+                rinfo.msg()
+            )?;
+        } else {
+            write!(io, "{}\n", rinfo.msg())?;
+        }
+
         Ok(())
     }
 }
 
 // TODO serializer?
-

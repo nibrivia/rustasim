@@ -41,7 +41,7 @@ impl Flow {
             dst,
 
             size_byte: n_packets * BYTES_PER_PACKET,
-            cwnd: 10,
+            cwnd: 4,
             next_seq: 0,
         }
     }

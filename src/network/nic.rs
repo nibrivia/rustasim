@@ -5,6 +5,8 @@ use crossbeam_queue::spsc::*;
 use slog::*;
 use std::collections::HashMap;
 use std::fmt;
+use std::thread;
+use std::time::{Instant, Duration};
 
 use crate::engine::*;
 use crate::network::tcp;
@@ -188,7 +190,7 @@ impl Router {
     ///
     /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
     /// This will almost certainly change to a function with no return value in the near future.
-    pub fn start(mut self, log: slog::Logger) -> u64 {
+    pub fn start(mut self, log: slog::Logger, start: Instant) -> u64 {
         let log = log.new(o!("Router" => self.id));
         //info!(log, "start...");
 
@@ -198,7 +200,7 @@ impl Router {
             v.push(*id);
         }
 
-        let merger = Merger::new(self.in_queues, self.id, v, log);
+        let merger = Merger::new(self.in_queues, self.id, v, log, start);
 
         // main loop :)
         for event in merger {
@@ -210,6 +212,7 @@ impl Router {
                         self.out_queues[dst_ix]
                             .push(Event {
                                 event_type: EventType::Close,
+                                real_time: start.elapsed().as_nanos(),
                                 src: self.id,
                                 time: event.time + self.latency_ns,
                             }) // add latency to avoid violating in-order invariant
@@ -226,11 +229,12 @@ impl Router {
                         let out_time = self.out_times[dst_ix];
                         // equal because they might just need a jog, blocking happens in the
                         // iterator, so no infinite loop risk
-                        if out_time == 0 || out_time < event.time {
+                        if out_time == 0 || out_time + self.latency_ns <= event.time {
                             //let cur_time = std::cmp::max(event.time, out_time);
                             self.out_queues[dst_ix]
                                 .push(Event {
                                     event_type: EventType::Null,
+                                    real_time: start.elapsed().as_nanos(),
                                     src: self.id,
                                     time: event.time + self.latency_ns,
                                 })
@@ -240,6 +244,7 @@ impl Router {
                             self.out_times[dst_ix] = event.time;
                         }
                     }
+                    thread::park();
                 }
 
                 // This is a message from neighbour we were waiting on, it has served its purpose
@@ -251,16 +256,6 @@ impl Router {
                         NetworkEvent::Flow(_flow) => unreachable!(),
 
                         NetworkEvent::Packet(packet) => {
-                            //self.count += 1;
-                            /*println!(
-                                "\x1b[0;3{}m@{} Router {} received {:?} from {}\x1b[0;00m",
-                                self.id + 1,
-                                event.time,
-                                self.id,
-                                packet,
-                                event.src
-                            );*/
-
                             // Next step
                             let next_hop_ix = self.route[packet.dst];
 
@@ -274,6 +269,7 @@ impl Router {
                             // go
                             if let Err(e) = self.out_queues[next_hop_ix].push(Event {
                                 event_type: EventType::ModelEvent(NetworkEvent::Packet(packet)),
+                                real_time: start.elapsed().as_nanos(),
                                 src: self.id,
                                 time: rx_end,
                             }) {
@@ -421,13 +417,14 @@ impl Server {
     ///
     /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
     /// This will almost certainly change to a function with no return value in the near future.
-    pub fn start(mut self, log: slog::Logger) -> u64 {
+    pub fn start(mut self, log: slog::Logger, start: Instant) -> u64 {
         let log = log.new(o!("Server" => self.id));
 
         // FIXME timeouts not yet implemented, let's keep this channel inactive
         self.out_queues[0]
             .push(Event {
                 event_type: EventType::Close,
+                real_time: start.elapsed().as_nanos(),
                 src: self.id,
                 time: 1_000_000_000_000_000, // large value
             })
@@ -443,7 +440,7 @@ impl Server {
         for id in &self.ix_to_id {
             v.push(*id);
         }
-        let merger = Merger::new(self.in_queues, self.id, v, log);
+        let merger = Merger::new(self.in_queues, self.id, v, log, start);
 
         for event in merger {
             self.count += 1;
@@ -455,6 +452,7 @@ impl Server {
                         self.out_queues[dst_ix]
                             .push(Event {
                                 event_type: EventType::Close,
+                                real_time: start.elapsed().as_nanos(),
                                 src: self.id,
                                 time: event.time + self.latency_ns,
                             }) // add latency to avoid violating in-order invariant
@@ -491,6 +489,7 @@ impl Server {
                         tor_q
                             .push(Event {
                                 event_type: EventType::Null,
+                                real_time: start.elapsed().as_nanos(),
                                 src: self.id,
                                 time: event.time + self.latency_ns,
                             })
@@ -499,6 +498,8 @@ impl Server {
 
                         tor_time = event.time;
                     }
+                    //std::thread::park_timeout();
+                    thread::park();
                 }
 
                 EventType::Null => unreachable!(),
@@ -513,9 +514,10 @@ impl Server {
                         }
 
                         NetworkEvent::Packet(mut packet) => {
-                            //println!("@{} Server #{} rx packet {:?}", event.time, self.id, packet);
-
-                            if !packet.is_ack {
+                            if packet.is_ack {
+                                let flow = self.flows.get_mut(&packet.flow_id).unwrap();
+                                flow.src_receive(packet)
+                            } else {
                                 // this is data, send ack back
                                 packet.dst = packet.src;
                                 packet.src = self.id;
@@ -524,10 +526,6 @@ impl Server {
                                 packet.size_byte = 10;
 
                                 (vec![packet], vec![])
-                            } else {
-                                // this is an ACK
-                                let flow = self.flows.get_mut(&packet.flow_id).unwrap();
-                                flow.src_receive(packet)
                             }
                         }
                     };
@@ -537,14 +535,15 @@ impl Server {
                         let tx_end = tor_time + self.ns_per_byte * p.size_byte;
                         let rx_end = tx_end + self.latency_ns;
 
+                        let event = Event {
+                            event_type: EventType::ModelEvent(NetworkEvent::Packet(p)),
+                            real_time: start.elapsed().as_nanos(),
+                            src: self.id,
+                            time: rx_end,
+                        };
+
                         // actually send the packet :)
-                        tor_q
-                            .push(Event {
-                                event_type: EventType::ModelEvent(NetworkEvent::Packet(p)),
-                                src: self.id,
-                                time: rx_end,
-                            })
-                            .unwrap();
+                        tor_q.push(event).unwrap();
 
                         // TODO move out of loop?
                         tor_time = tx_end;

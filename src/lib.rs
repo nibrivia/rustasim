@@ -129,6 +129,7 @@ impl World {
                     .push(Event {
                         src: 0,
                         time: 0,
+                        real_time: 0,
                         event_type: EventType::ModelEvent(NetworkEvent::Flow(f)),
                     })
                     .unwrap();
@@ -151,6 +152,7 @@ impl World {
         for (_, c) in self.chans.iter_mut() {
             c.push(Event {
                 time: done,
+                real_time: 0,
                 src: 0,
                 event_type: EventType::Close,
             })
@@ -170,7 +172,10 @@ impl World {
         //let decorator = slog_term::PlainDecorator::new(file);
         //let drain = slog_term::FullFormat::new(decorator).build().fuse();
         //let drain = slog_json::Json::new(file).build().fuse();
-        let drain = logger::MsgLogger::new(file).fuse();
+        let drain = logger::MsgLogger::new(file);
+        let start = drain.start;
+
+        let drain = drain.fuse();
         let drain = slog_async::Async::new(drain)
             .overflow_strategy(slog_async::OverflowStrategy::Block)
             .build()
@@ -178,20 +183,20 @@ impl World {
 
         let log = Logger::root(drain.fuse(), o!());
 
-        info!(log, "time, id, src, type");
+        info!(log, "rx_time, tx_time, sim_time, id, src, type");
 
         // Start each rack in its own thread
         let mut handles = Vec::new();
         for r in self.racks {
             handles.push(thread::spawn({
                 let log = log.clone();
-                move || r.start(log)
+                move || r.start(log, start)
             }));
         }
         for s in self.servers {
             handles.push(thread::spawn({
                 let log = log.clone();
-                move || s.start(log)
+                move || s.start(log, start)
             }));
         }
 

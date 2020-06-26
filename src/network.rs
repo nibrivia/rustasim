@@ -17,7 +17,13 @@ impl std::fmt::Debug for NetworkEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             NetworkEvent::Flow(_) => "Flow",
-            NetworkEvent::Packet(_) => "Packet",
+            NetworkEvent::Packet(packet) => {
+                if packet.is_ack {
+                    "Ack"
+                } else {
+                    "Packet"
+                }
+            }
         })
     }
 }
