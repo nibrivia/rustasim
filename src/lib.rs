@@ -187,13 +187,13 @@ impl World {
 
         // Start each rack in its own thread
         let mut handles = Vec::new();
-        for r in self.racks {
+        for mut r in self.racks {
             handles.push(thread::spawn({
                 let log = log.clone();
                 move || r.start(log, start)
             }));
         }
-        for s in self.servers {
+        for mut s in self.servers {
             handles.push(thread::spawn({
                 let log = log.clone();
                 move || s.start(log, start)

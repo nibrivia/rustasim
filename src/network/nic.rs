@@ -190,7 +190,7 @@ impl Router {
     ///
     /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
     /// This will almost certainly change to a function with no return value in the near future.
-    pub fn start(mut self, log: slog::Logger, start: Instant) -> u64 {
+    pub fn start(&mut self, log: slog::Logger, start: Instant) -> u64 {
         let log = log.new(o!("Router" => self.id));
         //info!(log, "start...");
 
@@ -200,7 +200,9 @@ impl Router {
             v.push(*id);
         }
 
-        let merger = Merger::new(self.in_queues, self.id, v, log, start);
+        let mut q = Vec::new();
+        std::mem::swap(&mut q, &mut self.in_queues);
+        let merger = Merger::new(q, self.id, v, log, start);
 
         // main loop :)
         for event in merger {
@@ -418,7 +420,7 @@ impl Server {
     ///
     /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
     /// This will almost certainly change to a function with no return value in the near future.
-    pub fn start(mut self, log: slog::Logger, start: Instant) -> u64 {
+    pub fn start(&mut self, log: slog::Logger, start: Instant) -> u64 {
         let log = log.new(o!("Server" => self.id));
 
         // FIXME timeouts not yet implemented, let's keep this channel inactive
@@ -441,7 +443,10 @@ impl Server {
         for id in &self.ix_to_id {
             v.push(*id);
         }
-        let merger = Merger::new(self.in_queues, self.id, v, log, start);
+
+        let mut q = Vec::new();
+        std::mem::swap(&mut q, &mut self.in_queues);
+        let merger = Merger::new(q, self.id, v, log, start);
 
         for event in merger {
             self.count += 1;
