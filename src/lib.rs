@@ -129,7 +129,7 @@ impl World {
                     .push(Event {
                         src: 0,
                         time: 0,
-                        real_time: 0,
+                        //real_time: 0,
                         event_type: EventType::ModelEvent(NetworkEvent::Flow(f)),
                     })
                     .unwrap();
@@ -152,7 +152,7 @@ impl World {
         for (_, c) in self.chans.iter_mut() {
             c.push(Event {
                 time: done,
-                real_time: 0,
+                //real_time: 0,
                 src: 0,
                 event_type: EventType::Close,
             })

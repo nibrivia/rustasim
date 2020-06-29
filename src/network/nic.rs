@@ -6,7 +6,7 @@ use slog::*;
 use std::collections::HashMap;
 use std::fmt;
 use std::thread;
-use std::time::{Instant, Duration};
+use std::time::Instant;
 
 use crate::engine::*;
 use crate::network::tcp;
@@ -212,7 +212,7 @@ impl Router {
                         self.out_queues[dst_ix]
                             .push(Event {
                                 event_type: EventType::Close,
-                                real_time: start.elapsed().as_nanos(),
+                                //real_time: start.elapsed().as_nanos(),
                                 src: self.id,
                                 time: event.time + self.latency_ns,
                             }) // add latency to avoid violating in-order invariant
@@ -234,7 +234,8 @@ impl Router {
                             self.out_queues[dst_ix]
                                 .push(Event {
                                     event_type: EventType::Null,
-                                    real_time: start.elapsed().as_nanos(),
+                                    //real_time: start.elapsed().as_nanos(),
+                                    //real_time: 0,
                                     src: self.id,
                                     time: event.time + self.latency_ns,
                                 })
@@ -244,7 +245,7 @@ impl Router {
                             self.out_times[dst_ix] = event.time;
                         }
                     }
-                    thread::park();
+                    thread::yield_now();
                 }
 
                 // This is a message from neighbour we were waiting on, it has served its purpose
@@ -269,7 +270,7 @@ impl Router {
                             // go
                             if let Err(e) = self.out_queues[next_hop_ix].push(Event {
                                 event_type: EventType::ModelEvent(NetworkEvent::Packet(packet)),
-                                real_time: start.elapsed().as_nanos(),
+                                //real_time: start.elapsed().as_nanos(),
                                 src: self.id,
                                 time: rx_end,
                             }) {
@@ -424,7 +425,7 @@ impl Server {
         self.out_queues[0]
             .push(Event {
                 event_type: EventType::Close,
-                real_time: start.elapsed().as_nanos(),
+                //real_time: start.elapsed().as_nanos(),
                 src: self.id,
                 time: 1_000_000_000_000_000, // large value
             })
@@ -452,7 +453,7 @@ impl Server {
                         self.out_queues[dst_ix]
                             .push(Event {
                                 event_type: EventType::Close,
-                                real_time: start.elapsed().as_nanos(),
+                                //real_time: start.elapsed().as_nanos(),
                                 src: self.id,
                                 time: event.time + self.latency_ns,
                             }) // add latency to avoid violating in-order invariant
@@ -489,7 +490,7 @@ impl Server {
                         tor_q
                             .push(Event {
                                 event_type: EventType::Null,
-                                real_time: start.elapsed().as_nanos(),
+                                //real_time: start.elapsed().as_nanos(),
                                 src: self.id,
                                 time: event.time + self.latency_ns,
                             })
@@ -499,7 +500,7 @@ impl Server {
                         tor_time = event.time;
                     }
                     //std::thread::park_timeout();
-                    thread::park();
+                    thread::yield_now();
                 }
 
                 EventType::Null => unreachable!(),
@@ -537,7 +538,8 @@ impl Server {
 
                         let event = Event {
                             event_type: EventType::ModelEvent(NetworkEvent::Packet(p)),
-                            real_time: start.elapsed().as_nanos(),
+                            //real_time: start.elapsed().as_nanos(),
+                            //real_time: 0,
                             src: self.id,
                             time: rx_end,
                         };

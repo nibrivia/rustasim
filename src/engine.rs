@@ -65,7 +65,7 @@ pub enum EventType<U> {
 #[derive(Debug)]
 pub struct Event<U> {
     pub time: u64,
-    pub real_time: u128,
+    //pub real_time: u128,
     pub src: usize,
     pub event_type: EventType<U>,
 }
@@ -205,7 +205,7 @@ where
         // index 0 never gets used
         loser_e.push(Event {
             time: 0,
-            real_time: 0,
+            //real_time: 0,
             event_type: EventType::Null,
             src: 0,
         });
@@ -215,7 +215,7 @@ where
         for i in 1..in_queues.len() {
             loser_e.push(Event {
                 time: 0,
-                real_time: 0,
+                //real_time: 0,
                 event_type: EventType::Null,
                 src: i,
             });
@@ -225,7 +225,7 @@ where
         for (loser, ix) in ltr_walk(in_queues.len()).iter().enumerate() {
             loser_e[*ix] = Event {
                 time: 0,
-                real_time: 0,
+                //real_time: 0,
                 event_type: EventType::Null,
                 src: loser + 1,
             };
@@ -320,7 +320,7 @@ where
                         self.stalled = true;
                         return Some(Event {
                             time: self.safe_time,
-                            real_time: self.start.elapsed().as_nanos(),
+                            //real_time: self.start.elapsed().as_nanos(),
                             src: self.winner_q,
                             event_type: EventType::Stalled,
                         });
@@ -363,8 +363,8 @@ where
 
             trace!(
                 self.log,
-                "{},{},{},{},{:?}",
-                new_winner_e.real_time,
+                "{},{},{},{:?}",
+                //new_winner_e.real_time,
                 new_winner_e.time,
                 self.id,
                 self.ix_to_id[new_winner_e.src],
