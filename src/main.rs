@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use num_cpus;
 use rustasim::World;
 
 fn main() {
@@ -20,6 +21,7 @@ fn main() {
     let duration = start.elapsed();
 
     let n_thread = counts.len();
+    let n_cpus = std::cmp::min(num_cpus::get(), n_thread);
 
     // each ToR sends to n_racks-1 racks and n_racks servers
     // each server (n_racks^2) is connected to 1 ToR
@@ -37,21 +39,29 @@ fn main() {
     // divide by the time it took us -> simulation bandwidth
     let gbps = (n_links * 8 * time_limit) as f64 / 1e9 / duration.as_secs_f64();
 
-    println!("= {} / {}s", sum_count, duration.as_secs_f32());
     println!(
-        "  {}M count/sec, {}M count/sec/thread",
-        (1e6 / ns_per_count as f64) as u64,
-        (1e6 / (ns_per_count * n_thread as u128) as f64) as u64
+        "= {} in {:.3}s. {} threads, {} cores",
+        sum_count,
+        duration.as_secs_f32(),
+        n_thread,
+        n_cpus,
     );
     println!(
-        "  {} ns/count, {} ns/count/thread",
+        "  {:.3}M count/sec, {:.3}M /thread, {:.3}M /cpu",
+        (1e6 / ns_per_count as f64),
+        (1e6 / (ns_per_count * n_thread as u128) as f64),
+        (1e6 / (ns_per_count * n_cpus as u128) as f64),
+    );
+    println!(
+        "  {} ns/count, {} ns/thread, {} ns/cpu",
         ns_per_count / 1000,
-        ns_per_count * n_thread as u128 / 1000
+        ns_per_count * n_thread as u128 / 1000,
+        ns_per_count * n_cpus as u128 / 1000
     );
     println!(
-        "  {} gbps, {} gbps/thread",
-        gbps as u64,
-        (gbps / n_thread as f64) as u64
+        "  {:.3} gbps, {:.3} gbps/thread",
+        gbps,
+        (gbps / n_thread as f64),
     );
 
     println!("done");
