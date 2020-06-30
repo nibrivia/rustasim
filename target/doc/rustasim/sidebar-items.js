@@ -1,1 +1,0 @@
-initSidebarItems({"mod":[["engine","Drives the simulation"],["logger",""],["network","Datacenter network model"],["worker","This module takes care of scheduling the actors appropriately"]],"struct":[["World",""]]});

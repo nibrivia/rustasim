@@ -1,1 +1,0 @@
-initSidebarItems({"fn":[["route_id","Given `network` a map of nodes and their neighbours, find the routing table for the given `id`"]],"type":[["Network",""]]});

@@ -1,1 +1,0 @@
-initSidebarItems({"enum":[["EventType","Event types and their associated data."]],"struct":[["Event","Fully describes an event."],["Merger","Manages the input queues and returns the next `Event` to be processed."]]});
