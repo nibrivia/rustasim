@@ -239,6 +239,7 @@ impl Router {
                             self.out_times[dst_ix] = event.time;
                         }
                     }
+                    // TODO return here and put ourselves at the back of the queue
                     thread::yield_now();
                 }
 
@@ -497,6 +498,7 @@ impl Server {
                         tor_time = event.time;
                     }
                     //std::thread::park_timeout();
+                    // TODO return here and put ourselves at the back of the queue
                     thread::yield_now();
                 }
 
