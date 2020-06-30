@@ -31,7 +31,7 @@ struct ThreadWorker<T> {
 impl<T: Advancer> ThreadWorker<T> {
     pub fn run(self) {
         loop {
-            let mut task: T = self.local.pop().or_else(|| {
+            let task = self.local.pop().or_else(|| {
                 // Otherwise, we need to look for a task elsewhere.
                 std::iter::repeat_with(|| {
                     // Try stealing a batch of tasks from the global queue.
@@ -43,10 +43,15 @@ impl<T: Advancer> ThreadWorker<T> {
                 .find(|s| !s.is_retry())
                 // Extract the stolen task, if there is one.
                 .and_then(|s| s.success())
-            }).unwrap(); // TODO investigate
+            }); // TODO investigate
 
-            task.advance();
-            self.local.push(task);
+            if let Some(mut actor) = task {
+                actor.advance();
+                self.local.push(actor);
+            } else {
+                // nothing to do, return?
+                return;
+            }
         }
     }
 }
