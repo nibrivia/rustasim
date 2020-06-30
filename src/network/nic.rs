@@ -143,14 +143,6 @@ impl Router {
         }
     }
 
-    // TODO remove?
-    pub fn init_queue(&mut self, dst: usize, events: Vec<ModelEvent>) {
-        let dst_ix = self.id_to_ix[&dst];
-        for e in events {
-            self.out_queues[dst_ix].push(e).unwrap();
-        }
-    }
-
     // needs to be called last
     // TODO document
     pub fn connect_world(&mut self) -> Producer<ModelEvent> {
