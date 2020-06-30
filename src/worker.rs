@@ -14,11 +14,10 @@
 //! any more progress, and can be called repeatedly. This module can take these "advanceables"
 //! (trait?) and schedule them via crossbeam's work-stealing queue (insert link).
 
-use crossbeam_deque::{Injector, Steal, Stealer, Worker};
-
+use crossbeam_deque::{Injector, Stealer, Worker};
 
 trait Advancer {
-    fn advance(&mut self);
+    fn advance(&mut self) -> bool;
 }
 
 #[derive(Debug)]
@@ -29,13 +28,17 @@ struct ThreadWorker<T> {
 }
 
 impl<T: Advancer> ThreadWorker<T> {
+    /// Runs until no more progress can be made at all...
+    ///
+    /// TODO: pulled from crossbeam's documentation, figure more about how it works
     pub fn run(self) {
         loop {
             let task = self.local.pop().or_else(|| {
                 // Otherwise, we need to look for a task elsewhere.
                 std::iter::repeat_with(|| {
                     // Try stealing a batch of tasks from the global queue.
-                    self.global.steal_batch_and_pop(&self.local)
+                    self.global
+                        .steal_batch_and_pop(&self.local)
                         // Or try stealing a task from one of the other threads.
                         .or_else(|| self.stealers.iter().map(|s| s.steal()).collect())
                 })
@@ -43,15 +46,83 @@ impl<T: Advancer> ThreadWorker<T> {
                 .find(|s| !s.is_retry())
                 // Extract the stolen task, if there is one.
                 .and_then(|s| s.success())
-            }); // TODO investigate
+            });
 
             if let Some(mut actor) = task {
-                actor.advance();
-                self.local.push(actor);
+                if actor.advance() {
+                    self.local.push(actor);
+                }
             } else {
                 // nothing to do, return?
                 return;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::worker::{Advancer, ThreadWorker};
+    use crossbeam_deque::{Injector, Stealer, Worker};
+
+    struct DummyAdvance {
+        id: usize,
+        count: u64,
+        limit: u64,
+    }
+
+    impl DummyAdvance {
+        fn new(id: usize, limit: u64) -> DummyAdvance {
+            DummyAdvance {
+                id,
+                count: 0,
+                limit,
+            }
+        }
+
+        fn count(&self) -> u64 {
+            self.count
+        }
+    }
+
+    impl Advancer for DummyAdvance {
+        fn advance(&mut self) -> bool {
+            self.count += 1;
+            println!("{}: {}", self.id, self.count);
+
+            // Done
+            return self.count < self.limit;
+        }
+    }
+
+    #[test]
+    fn test_advance() {
+        let mut dummy = &mut DummyAdvance::new(0, 3);
+        assert!(dummy.advance());
+        assert!(dummy.advance());
+        assert!(!dummy.advance()); // stops on the 3rd
+    }
+
+    #[test]
+    fn test_single_thread() {
+        let local = Worker::<DummyAdvance>::new_fifo();
+        let global = Injector::<DummyAdvance>::new();
+        let stealers = Vec::new();
+
+        let advancer = DummyAdvance::new(1, 3);
+        local.push(advancer);
+
+        let advancer = DummyAdvance::new(2, 5);
+        local.push(advancer);
+
+        let thread_worker = ThreadWorker {
+            local,
+            global,
+            stealers,
+        };
+        thread_worker.run();
+
+        // TODO find auto testing
+        assert!(true);
     }
 }
