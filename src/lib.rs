@@ -174,7 +174,7 @@ impl World {
         //let drain = slog_term::FullFormat::new(decorator).build().fuse();
         //let drain = slog_json::Json::new(file).build().fuse();
         let drain = logger::MsgLogger::new(file);
-        let start = drain.start;
+        //let start = drain.start;
 
         let drain = drain.fuse();
         let drain = slog_async::Async::new(drain)
@@ -190,14 +190,16 @@ impl World {
         let mut handles = Vec::new();
         for mut r in self.racks {
             handles.push(thread::spawn({
-                let log = log.clone();
-                move || r.start(log, start)
+                //let log = log.clone();
+                //move || r.start(log, start)
+                move || r.start()
             }));
         }
         for mut s in self.servers {
             handles.push(thread::spawn({
-                let log = log.clone();
-                move || s.start(log, start)
+                //let log = log.clone();
+                //move || s.start(log, start)
+                move || s.start()
             }));
         }
 

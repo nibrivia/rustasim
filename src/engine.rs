@@ -17,10 +17,8 @@
 // TODO description of when the null-message should be sent and what it should look like
 
 use crossbeam_queue::spsc;
-use slog::*;
 use std::cmp::Ordering;
 use std::mem;
-use std::time::Instant;
 
 // TODO update description to match the parametrized Events we have
 /// Event types and their associated data.
@@ -97,8 +95,7 @@ impl<U> Eq for Event<U> {}
 #[derive(Debug)]
 pub struct Merger<U> {
     id: usize,
-    start: Instant,
-
+    //start: Instant,
     // the input queues
     in_queues: Vec<spsc::Consumer<Event<U>>>,
     n_layers: usize,
@@ -114,7 +111,7 @@ pub struct Merger<U> {
     loser_e: Vec<Event<U>>,
 
     // logger
-    log: slog::Logger,
+    //log: slog::Logger,
     ix_to_id: Vec<usize>,
 }
 
@@ -197,8 +194,8 @@ where
         in_queues: Vec<spsc::Consumer<Event<U>>>,
         id: usize,
         ix_to_id: Vec<usize>,
-        log: slog::Logger,
-        start: Instant,
+        //log: slog::Logger,
+        //start: Instant,
     ) -> Merger<U> {
         let mut loser_e = Vec::new();
         let winner_q = 0;
@@ -268,7 +265,6 @@ where
 
         Merger {
             id,
-            start,
 
             in_queues,
             n_layers,
@@ -281,7 +277,7 @@ where
 
             loser_e,
 
-            log,
+            //log,
             ix_to_id,
         }
     }
@@ -362,7 +358,7 @@ where
             // We need this to return events even if we don't have new events coming in...
             self.safe_time = new_winner_e.time;
 
-            trace!(
+            /*trace!(
                 self.log,
                 "{},{},{},{:?}",
                 //new_winner_e.real_time,
@@ -370,7 +366,7 @@ where
                 self.id,
                 self.ix_to_id[new_winner_e.src],
                 new_winner_e.event_type,
-            );
+            );*/
 
             // Null events are only useful for us
             if let EventType::Null = new_winner_e.event_type {

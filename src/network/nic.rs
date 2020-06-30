@@ -2,11 +2,9 @@
 
 use crossbeam_queue::spsc;
 use crossbeam_queue::spsc::*;
-use slog::*;
 use std::collections::HashMap;
 use std::fmt;
-use std::thread;
-use std::time::Instant;
+//use std::thread;
 
 use crate::engine::*;
 use crate::network::tcp;
@@ -121,6 +119,7 @@ impl Connectable for &mut Router {
     }
 }
 
+// TODO extract a build
 impl Router {
     // TODO document
     pub fn new(id: usize) -> Router {
@@ -178,12 +177,19 @@ impl Router {
         }
     }
 
+    pub fn start(&mut self) -> u64 {
+        while self.advance() {}
+
+        return self.count;
+    }
+
     /// Starts the rack, consumes the object
     ///
     /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
     /// This will almost certainly change to a function with no return value in the near future.
-    pub fn start(&mut self, log: slog::Logger, start: Instant) -> u64 {
-        let log = log.new(o!("Router" => self.id));
+    //pub fn start(&mut self, log: slog::Logger, start: Instant) -> u64 {
+    pub fn advance(&mut self) -> bool {
+        //let log = log.new(o!("Router" => self.id));
         //info!(log, "start...");
 
         // build the event merger
@@ -194,7 +200,7 @@ impl Router {
 
         let mut q = Vec::new();
         std::mem::swap(&mut q, &mut self.in_queues);
-        let merger = Merger::new(q, self.id, v, log, start);
+        let merger = Merger::new(q, self.id, v);
 
         // main loop :)
         for event in merger {
@@ -240,7 +246,8 @@ impl Router {
                         }
                     }
                     // TODO return here and put ourselves at the back of the queue
-                    thread::yield_now();
+                    //thread::yield_now();
+                    return true;
                 }
 
                 // This is a message from neighbour we were waiting on, it has served its purpose
@@ -285,7 +292,7 @@ impl Router {
         } // end for loop
 
         //info!(log, "Router #{} done. {} pkts", self.id, self.count);
-        self.count
+        false
     } // end start() function
 } // end NIC methods
 
@@ -413,8 +420,15 @@ impl Server {
     ///
     /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
     /// This will almost certainly change to a function with no return value in the near future.
-    pub fn start(&mut self, log: slog::Logger, start: Instant) -> u64 {
-        let log = log.new(o!("Server" => self.id));
+    pub fn start(&mut self) -> u64 {
+        while self.advance() {}
+
+        return self.count;
+    }
+
+    //pub fn advance(&mut self, log: slog::Logger, start: Instant) -> bool {
+    pub fn advance(&mut self) -> bool {
+        //let log = log.new(o!("Server" => self.id));
 
         // FIXME timeouts not yet implemented, let's keep this channel inactive
         self.out_queues[0]
@@ -439,7 +453,7 @@ impl Server {
 
         let mut q = Vec::new();
         std::mem::swap(&mut q, &mut self.in_queues);
-        let merger = Merger::new(q, self.id, v, log, start);
+        let merger = Merger::new(q, self.id, v);
 
         for event in merger {
             self.count += 1;
@@ -499,7 +513,8 @@ impl Server {
                     }
                     //std::thread::park_timeout();
                     // TODO return here and put ourselves at the back of the queue
-                    thread::yield_now();
+                    //thread::yield_now();
+                    return true;
                 }
 
                 EventType::Null => unreachable!(),
@@ -559,6 +574,6 @@ impl Server {
         }
 
         //info!(log, "Server #{} done. {} pkts", self.id, self.count);
-        self.count
+        false
     }
 }
