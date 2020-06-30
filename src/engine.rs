@@ -22,6 +22,7 @@ use std::cmp::Ordering;
 use std::mem;
 use std::time::Instant;
 
+// TODO update description to match the parametrized Events we have
 /// Event types and their associated data.
 ///
 /// These are all simulation-driving related events. None of them have anything to do with the
@@ -381,6 +382,7 @@ where
     }
 }
 
+// TODO make test-able again
 /*
 #[cfg(test)]
 mod test_merger {
