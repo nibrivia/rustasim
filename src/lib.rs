@@ -17,11 +17,11 @@ pub mod network;
 pub mod worker;
 
 use crate::engine::*;
-use crate::network::nic::*;
 use crate::network::routing::{route_id, Network};
 use crate::network::tcp::*;
-use crate::network::ModelEvent;
-use crate::network::NetworkEvent;
+use crate::network::{Connectable, ModelEvent, NetworkEvent};
+use crate::network::server::Server;
+use crate::network::router::Router;
 
 pub struct World {
     /// The actors themselves

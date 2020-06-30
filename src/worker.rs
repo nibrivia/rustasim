@@ -63,7 +63,7 @@ impl<T: Advancer> ThreadWorker<T> {
 #[cfg(test)]
 mod test {
     use crate::worker::{Advancer, ThreadWorker};
-    use crossbeam_deque::{Injector, Stealer, Worker};
+    use crossbeam_deque::{Injector, Worker};
 
     struct DummyAdvance {
         id: usize,
@@ -80,7 +80,7 @@ mod test {
             }
         }
 
-        fn count(&self) -> u64 {
+        fn _count(&self) -> u64 {
             self.count
         }
     }
@@ -97,7 +97,7 @@ mod test {
 
     #[test]
     fn test_advance() {
-        let mut dummy = &mut DummyAdvance::new(0, 3);
+        let dummy = &mut DummyAdvance::new(0, 3);
         assert!(dummy.advance());
         assert!(dummy.advance());
         assert!(!dummy.advance()); // stops on the 3rd
