@@ -14,6 +14,7 @@ use slog_async;
 pub mod engine;
 pub mod logger;
 pub mod network;
+pub mod worker;
 
 use crate::engine::*;
 use crate::network::nic::*;
