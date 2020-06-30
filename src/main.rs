@@ -23,9 +23,9 @@ fn main() {
     let n_thread = counts.len();
     let n_cpus = std::cmp::min(num_cpus::get(), n_thread);
 
-    // each ToR sends to n_racks-1 racks and n_racks servers
+    // each ToR sends to n_racks-1 racks and n_racks-1 servers
     // each server (n_racks^2) is connected to 1 ToR
-    let n_links = (n_racks * (n_racks - 1 + n_racks) + n_racks) as u64;
+    let n_links = (n_racks * 2 * (n_racks - 1) + (n_racks * (n_racks - 1))) as u64;
 
     // stats...
     let sum_count = counts.iter().sum::<u64>();
