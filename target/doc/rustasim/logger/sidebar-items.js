@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["MsgLogger","Attempt to write a very simple logger"]]});

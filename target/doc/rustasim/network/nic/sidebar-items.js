@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Device","Device types"]],"struct":[["Router","Top of rack switch"],["Server","Server-in-a-rack actor"]],"trait":[["Connectable","A standard interface for connecting devices of all types"]]});
