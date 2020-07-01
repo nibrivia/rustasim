@@ -8,9 +8,9 @@ fn main() {
 
     //let time_limit: u64 = 1_000_000_000;
     //                      s  ms  us  ns
-    let time_limit: u64 = 000_041_111_000;
+    let time_limit: u64 = 001_111_111_000;
 
-    let n_racks = 7;
+    let n_racks = 2;
 
     println!("Setup...");
     let world = World::new(n_racks);
@@ -29,10 +29,10 @@ fn main() {
 
     // stats...
     let sum_count = counts.iter().sum::<u64>();
-    let ns_per_count = if sum_count > 0 {
-        1000 * duration.as_nanos() / sum_count as u128
+    let ns_per_count: f64 = if sum_count > 0 {
+        1000. * duration.as_nanos() as f64 / sum_count as f64
     } else {
-        0
+        0.
     };
 
     // each link is 8Gbps, time_limit/1e9 is in seconds which is how much we simulated
@@ -49,14 +49,14 @@ fn main() {
     println!(
         "  {:.3}M count/sec, {:.3}M /actors, {:.3}M /cpu",
         (1e6 / ns_per_count as f64),
-        (1e6 / (ns_per_count * n_thread as u128) as f64),
-        (1e6 / (ns_per_count * n_cpus as u128) as f64),
+        (1e6 / (ns_per_count * n_thread as f64)),
+        (1e6 / (ns_per_count * n_cpus as f64)),
     );
     println!(
-        "  {} ns/count, {} ns/actor, {} ns/cpu",
-        ns_per_count / 1000,
-        ns_per_count * n_thread as u128 / 1000,
-        ns_per_count * n_cpus as u128 / 1000
+        "  {:.1} ns/count, {:.1} ns/actor, {:.1} ns/cpu",
+        ns_per_count / 1000. as f64,
+        ns_per_count * n_thread as f64 / 1000.,
+        ns_per_count * n_cpus as f64 / 1000.
     );
     println!(
         "  {:.3} gbps, {:.3} gbps/actor ({} links total)",
