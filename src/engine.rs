@@ -105,7 +105,6 @@ pub struct Merger<U> {
     // the queue to pull from
     winner_q: usize,
     safe_time: u64,
-    stalled: bool,
 
     // the loser queue
     loser_e: Vec<Event<U>>,
@@ -271,7 +270,6 @@ where
 
             winner_q,
             safe_time: 0,
-            stalled: false,
 
             paths,
 
