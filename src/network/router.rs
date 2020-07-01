@@ -3,53 +3,37 @@
 use crossbeam_queue::spsc;
 use crossbeam_queue::spsc::*;
 use std::collections::HashMap;
-use std::fmt;
 //use std::thread;
 
 use crate::engine::*;
 use crate::network::{Connectable, Device, ModelEvent, NetworkEvent, Q_SIZE};
+use crate::worker::{ActorState, Advancer};
 
-
-
-/// Top of rack switch
+/// Top of rack switch builder
 ///
 /// Connects down to a certain number of servers and out to backbone switches. It is important that
 /// the up- and down- bandwidth be matched lest there be excessive queues.
-///
-/// For performance reasons, it is beneficial to not use hash tables in critical-path data
-/// structures. This means that each `Router` has a mapping of other Router IDs to an index. `Event`s
-/// coming out of the `Merger` already have their `src` field converted to the right index for us.
-pub struct Router {
-    id: usize,
+pub struct RouterBuilder {
+    pub id: usize,
 
     // fundamental properties
     latency_ns: u64,
     ns_per_byte: u64,
 
+    // internal mappings
     id_to_ix: HashMap<usize, usize>,
     ix_to_id: Vec<usize>,
     next_ix: usize,
 
-    // event management
-    //event_receiver: EventScheduler,
-    in_queues: Vec<Consumer<ModelEvent>>,
-    out_queues: Vec<Producer<ModelEvent>>,
-    out_times: Vec<u64>,
-
-    // Route should eventually be turned into a vec
+    // route
     route: Vec<usize>,
 
-    // stats
-    count: u64,
+    // event management
+    in_queues: Vec<Consumer<ModelEvent>>,
+    out_queues: Vec<Producer<ModelEvent>>,
 }
 
-impl fmt::Display for Router {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Router {}", self.id)
-    }
-}
-
-impl Connectable for &mut Router {
+impl Connectable for &mut RouterBuilder {
     fn id(&self) -> usize {
         self.id
     }
@@ -67,7 +51,7 @@ impl Connectable for &mut Router {
         let tx_queue = (other).back_connect(&mut **self, prod);
         self.out_queues.push(tx_queue);
         self.in_queues.push(cons);
-        self.out_times.push(0);
+        //self.out_times.push(0);
 
         // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
 
@@ -83,7 +67,7 @@ impl Connectable for &mut Router {
         self.ix_to_id.push(other.id());
 
         self.out_queues.push(tx_queue);
-        self.out_times.push(0);
+        //self.out_times.push(0);
         // self.route.insert(other.id, self.next_ix); // route to neighbour is neighbour
 
         let (prod, cons) = spsc::new(Q_SIZE);
@@ -96,10 +80,10 @@ impl Connectable for &mut Router {
 }
 
 // TODO extract a build
-impl Router {
+impl RouterBuilder {
     // TODO document
-    pub fn new(id: usize) -> Router {
-        Router {
+    pub fn new(id: usize) -> RouterBuilder {
+        RouterBuilder {
             id,
             latency_ns: 100,
             ns_per_byte: 1,
@@ -110,11 +94,8 @@ impl Router {
 
             in_queues: Vec::new(),
             out_queues: Vec::new(),
-            out_times: Vec::new(),
 
             route: Vec::new(),
-
-            count: 0,
         }
     }
 
@@ -153,33 +134,108 @@ impl Router {
         }
     }
 
-    pub fn start(&mut self) -> u64 {
-        while self.advance() {}
-
-        return self.count;
-    }
-
-    /// Starts the rack, consumes the object
-    ///
-    /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
-    /// This will almost certainly change to a function with no return value in the near future.
-    //pub fn start(&mut self, log: slog::Logger, start: Instant) -> u64 {
-    pub fn advance(&mut self) -> bool {
-        //let log = log.new(o!("Router" => self.id));
-        //info!(log, "start...");
-
+    pub fn build(self) -> Router {
         // build the event merger
         let mut v = Vec::new();
         for id in &self.ix_to_id {
             v.push(*id);
         }
 
-        let mut q = Vec::new();
-        std::mem::swap(&mut q, &mut self.in_queues);
-        let merger = Merger::new(q, self.id, v);
+        let merger = Merger::new(self.in_queues, self.id, v);
+
+        let mut out_times = vec![];
+        for dst_ix in 0..self.out_queues.len() {
+            self.out_queues[dst_ix]
+                .push(Event {
+                    event_type: EventType::Null,
+                    //real_time: start.elapsed().as_nanos(),
+                    //real_time: 0,
+                    src: self.id,
+                    time: self.latency_ns,
+                })
+                .unwrap();
+
+            out_times.push(0);
+        }
+
+        Router {
+            id: self.id,
+
+            latency_ns: self.latency_ns,
+            ns_per_byte: self.ns_per_byte,
+
+            merger,
+
+            ix_to_id: self.ix_to_id,
+
+            // event management
+            out_queues: self.out_queues,
+            out_times,
+
+            // Route should eventually be turned into a vec
+            route: self.route,
+
+            // stats
+            count: 0,
+        }
+    }
+}
+
+/// Top of rack switch
+///
+/// For performance reasons, it is beneficial to not use hash tables in critical-path data
+/// structures. This means that each `Router` has a mapping of other Router IDs to an index. `Event`s
+/// coming out of the `Merger` already have their `src` field converted to the right index for us.
+pub struct Router {
+    pub id: usize,
+
+    // fundamental properties
+    latency_ns: u64,
+    ns_per_byte: u64,
+
+    ix_to_id: Vec<usize>,
+
+    merger: Merger<NetworkEvent>,
+
+    // event management
+    out_queues: Vec<Producer<ModelEvent>>,
+    out_times: Vec<u64>,
+
+    // Route should eventually be turned into a vec
+    route: Vec<usize>,
+
+    // stats
+    pub count: u64,
+}
+
+impl Router {
+    pub fn start(&mut self) -> u64 {
+        println!("Router {} start", self.id);
+        while let ActorState::Continue = self.advance() {}
+
+        println!("Router {} done", self.id);
+        return self.count;
+    }
+}
+
+impl Advancer for Router {
+    /// Starts the rack, consumes the object
+    ///
+    /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
+    /// This will almost certainly change to a function with no return value in the near future.
+    //pub fn start(&mut self, log: slog::Logger, start: Instant) -> u64 {
+    fn advance(&mut self) -> ActorState {
+        //println!("Router {} advancing", self.id);
+        //let log = log.new(o!("Router" => self.id));
+        //info!(log, "start...");
 
         // main loop :)
-        for event in merger {
+        //for event in self.merger {
+        while let Some(event) = self.merger.next() {
+            /*println!(
+                "Router {} @{}: <{} {:?}",
+                self.id, event.time, self.ix_to_id[event.src], event.event_type
+            );*/
             self.count += 1;
             match event.event_type {
                 EventType::Close => {
@@ -205,7 +261,7 @@ impl Router {
                         let out_time = self.out_times[dst_ix];
                         // equal because they might just need a jog, blocking happens in the
                         // iterator, so no infinite loop risk
-                        if out_time == 0 || out_time + self.latency_ns <= event.time {
+                        if out_time + self.latency_ns <= event.time {
                             //let cur_time = std::cmp::max(event.time, out_time);
                             self.out_queues[dst_ix]
                                 .push(Event {
@@ -220,14 +276,22 @@ impl Router {
 
                             self.out_times[dst_ix] = event.time;
                         }
+                        /*println!(
+                            "Router {} @{}: Null({}) >{}",
+                            self.id,
+                            event.time,
+                            event.time + self.latency_ns,
+                            self.ix_to_id[dst_ix]
+                        );*/
                     }
                     // TODO return here and put ourselves at the back of the queue
                     //thread::yield_now();
-                    return true;
+                    //println!("Router {} stall", self.id);
+                    return ActorState::Continue;
                 }
 
                 // This is a message from neighbour we were waiting on, it has served its purpose
-                EventType::Null => unreachable!(),
+                EventType::Null => {} //unreachable!(),
 
                 EventType::ModelEvent(model_event) => {
                     match model_event {
@@ -268,7 +332,6 @@ impl Router {
         } // end for loop
 
         //info!(log, "Router #{} done. {} pkts", self.id, self.count);
-        false
+        ActorState::Done(self.count)
     } // end start() function
 } // end NIC methods
-

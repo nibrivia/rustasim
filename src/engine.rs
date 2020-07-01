@@ -312,22 +312,22 @@ where
             // get the new candidate
             let mut new_winner_e = match q.pop() {
                 Err(_) => {
-                    if !self.stalled {
-                        // return Stalled event
-                        self.stalled = true;
-                        return Some(Event {
-                            time: self.safe_time,
-                            //real_time: self.start.elapsed().as_nanos(),
-                            src: self.winner_q,
-                            event_type: EventType::Stalled,
-                        });
-                    } else {
+                    //if !self.stalled {
+                    // return Stalled event
+                    self.stalled = true;
+                    return Some(Event {
+                        time: self.safe_time,
+                        //real_time: self.start.elapsed().as_nanos(),
+                        src: self.winner_q,
+                        event_type: EventType::Stalled,
+                    });
+                    /*} else {
                         // blocking wait
                         q.wait();
                         //while q.len() == 0 {}
                         self.stalled = false;
                         q.pop().unwrap()
-                    }
+                    }*/
                 }
                 Ok(event) => {
                     self.stalled = false;
@@ -379,7 +379,6 @@ where
 }
 
 // TODO make test-able again
-/*
 #[cfg(test)]
 mod test_merger {
     use crate::engine::*;
@@ -466,7 +465,7 @@ mod test_merger {
         }
 
         // Merger
-        let mut merger = Merger::<EmptyModel>::new(cons_qs);
+        let mut merger = Merger::<EmptyModel>::new(cons_qs, 0, vec![]);
 
         //prod_qs
         println!("Pushing events");
@@ -529,7 +528,7 @@ mod test_merger {
         }
 
         // Merger
-        let mut merger = Merger::<EmptyModel>::new(cons_qs);
+        let mut merger = Merger::<EmptyModel>::new(cons_qs, 0, vec![]);
 
         // checker vars
 
@@ -598,4 +597,3 @@ mod test_merger {
         handle.join().unwrap();
     }
 }
-*/

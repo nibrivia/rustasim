@@ -4,8 +4,11 @@
 //! engine](synchronizer/index.html) and the model. In general, the engine should be agnostic to
 //! the type of model being run, and should probably eventually be pulled out into its own crate.
 
+use crossbeam_deque::Worker;
+use crossbeam_queue::spsc;
 use crossbeam_queue::spsc::*;
 use std::collections::HashMap;
+//use std::sync::Arc;
 use std::thread;
 
 use slog::*;
@@ -17,11 +20,12 @@ pub mod network;
 pub mod worker;
 
 use crate::engine::*;
+use crate::network::router::{Router, RouterBuilder};
 use crate::network::routing::{route_id, Network};
+use crate::network::server::{Server, ServerBuilder};
 use crate::network::tcp::*;
 use crate::network::{Connectable, ModelEvent, NetworkEvent};
-use crate::network::server::Server;
-use crate::network::router::Router;
+use crate::worker::{run, Advancer};
 
 pub struct World {
     /// The actors themselves
@@ -52,14 +56,14 @@ impl World {
         // TODO backbone switches
 
         // Racks -----------------------------------------------
-        let mut racks: Vec<Router> = Vec::new();
+        let mut rack_builders: Vec<RouterBuilder> = Vec::new();
 
         for _ in 0..n_racks {
-            let mut r = Router::new(next_id);
+            let mut r = RouterBuilder::new(next_id);
             network.insert(next_id, vec![]);
 
             // connect up with other racks
-            for rack2 in racks.iter_mut() {
+            for rack2 in rack_builders.iter_mut() {
                 // update our network matrix
                 network.get_mut(&next_id).unwrap().push(rack2.id());
                 network.get_mut(&rack2.id()).unwrap().push(next_id);
@@ -69,19 +73,19 @@ impl World {
             }
 
             next_id += 1;
-            racks.push(r);
+            rack_builders.push(r);
         }
 
         // Servers ---------------------------------------------
-        let mut servers = Vec::new();
+        let mut server_builders = Vec::new();
 
         for rack_ix in 0..n_racks {
             for _ in 0..servers_per_rack {
-                let mut s = Server::new(next_id);
+                let mut s = ServerBuilder::new(next_id);
                 network.insert(next_id, vec![]);
 
                 // get the parent rack (needs to be done each time, ref is consumed by connect)
-                let rack = racks.get_mut(rack_ix).unwrap();
+                let rack = rack_builders.get_mut(rack_ix).unwrap();
 
                 // update network matrix
                 network.get_mut(&next_id).unwrap().push(rack.id());
@@ -92,12 +96,12 @@ impl World {
 
                 // push and consume
                 next_id += 1;
-                servers.push(s);
+                server_builders.push(s);
             }
         }
 
         // Routing ---------------------------------------------
-        for r in racks.iter_mut() {
+        for r in rack_builders.iter_mut() {
             let rack_id = r.id();
 
             let routes = route_id(&network, rack_id);
@@ -106,16 +110,21 @@ impl World {
 
         // World -----------------------------------------------
         let mut chans = HashMap::new();
-        for s in &mut servers {
-            chans.insert(s.id(), s.connect_world());
+        let mut servers = vec![];
+        for mut b in server_builders {
+            chans.insert(b.id, b.connect_world());
+            servers.push(b.build());
         }
-        for r in &mut racks {
-            chans.insert(r.id(), r.connect_world());
+
+        let mut racks = vec![];
+        for mut rb in rack_builders {
+            chans.insert(rb.id, rb.connect_world());
+            racks.push(rb.build());
         }
 
         // Flows -----------------------------------------------
         for src_ix in 0..servers.len() {
-            let src_id = (&mut servers[src_ix]).id();
+            let src_id = (&mut servers[src_ix]).id;
 
             for dst_ix in 0..servers.len() {
                 // skip self flows...
@@ -123,7 +132,7 @@ impl World {
                     continue;
                 }
 
-                let dst_id = (&mut servers[dst_ix]).id();
+                let dst_id = (&mut servers[dst_ix]).id;
 
                 let f = Flow::new(src_id, dst_id, 100000000);
                 chans[&src_id]
@@ -148,7 +157,7 @@ impl World {
     /// Runs this `World`'s simulation up to time `done`.
     ///
     /// This will spawn a thread per actor and wait for all of them to end.
-    pub fn start(mut self, done: u64) -> Vec<u64> {
+    pub fn start(mut self, num_cpus: usize, done: u64) -> Vec<u64> {
         // Tell everyone when the end is
         for (_, c) in self.chans.iter_mut() {
             c.push(Event {
@@ -186,28 +195,66 @@ impl World {
 
         info!(log, "rx_time, tx_time, sim_time, id, src, type");
 
-        // Start each rack in its own thread
-        let mut handles = Vec::new();
-        for mut r in self.racks {
-            handles.push(thread::spawn({
-                //let log = log.clone();
-                //move || r.start(log, start)
-                move || r.start()
-            }));
-        }
-        for mut s in self.servers {
-            handles.push(thread::spawn({
-                //let log = log.clone();
-                //move || s.start(log, start)
-                move || s.start()
-            }));
+        // Workers
+        let mut workers: Vec<Worker<Box<dyn Advancer + Send>>> = Vec::new();
+        let mut stealers = Vec::new();
+        for _ in 0..num_cpus {
+            let w = Worker::new_fifo();
+            stealers.push(w.stealer());
+            workers.push(w);
         }
 
-        // Get the results
+        let mut prods = Vec::new();
+        let mut cons = Vec::new();
+        for _ in 0..num_cpus {
+            let (p, c) = spsc::new(128);
+            prods.push(p);
+            cons.push(c);
+        }
+
+        let p = prods.pop().unwrap();
+        prods.push(p);
+
+        let mut cur_worker = 0;
+        for s in self.servers {
+            workers[cur_worker].push(Box::new(s));
+            cur_worker = (cur_worker + 1) % num_cpus;
+        }
+        for r in self.racks {
+            workers[cur_worker].push(Box::new(r));
+            cur_worker = (cur_worker + 1) % num_cpus;
+        }
+
+        let mut handles = Vec::new();
+        //let injector = Arc::new(injector);
+        let mut i = 0;
+        for mut w in workers {
+            let mut local_stealers = Vec::new();
+            i += 1;
+            for j in i..stealers.len() {
+                local_stealers.push(stealers[j].clone());
+            }
+            for j in 0..i {
+                local_stealers.push(stealers[j].clone());
+            }
+
+            if local_stealers.len() != stealers.len() {
+                unreachable!();
+            }
+
+            let prev = cons.pop().unwrap();
+            let next = prods.pop().unwrap();
+
+            handles.push(
+                //let injector = Arc::clone(&injector);
+                thread::spawn(move || run(i, &mut w, prev, next, local_stealers)),
+            );
+        }
+
         let mut counts = Vec::new();
         for h in handles {
-            let c = h.join().unwrap();
-            counts.push(c);
+            let local_counts: Vec<u64> = h.join().unwrap();
+            counts.extend(local_counts);
         }
 
         counts

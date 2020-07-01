@@ -8,16 +8,16 @@ fn main() {
 
     //let time_limit: u64 = 1_000_000_000;
     //                      s  ms  us  ns
-    let time_limit: u64 = 000_011_111_000;
+    let time_limit: u64 = 000_041_111_000;
 
-    let n_racks = 8;
+    let n_racks = 7;
 
     println!("Setup...");
     let world = World::new(n_racks);
 
     println!("Run...");
     let start = Instant::now();
-    let counts = world.start(time_limit);
+    let counts = world.start(num_cpus::get() - 1, time_limit);
     let duration = start.elapsed();
 
     let n_thread = counts.len();
@@ -59,9 +59,10 @@ fn main() {
         ns_per_count * n_cpus as u128 / 1000
     );
     println!(
-        "  {:.3} gbps, {:.3} gbps/thread",
+        "  {:.3} gbps, {:.3} gbps/thread ({} links total)",
         gbps,
         (gbps / n_thread as f64),
+        n_links
     );
 
     println!("done");

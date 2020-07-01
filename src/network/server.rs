@@ -5,14 +5,10 @@ use std::collections::HashMap;
 use crate::engine::*;
 use crate::network::tcp;
 use crate::network::{Connectable, Device, ModelEvent, NetworkEvent, Q_SIZE};
+use crate::worker::{ActorState, Advancer};
 
-/// Server-in-a-rack actor
-///
-/// The server has 3 neighbours: the top-of-rack switch, the outside world, and itself (for
-/// timeouts). Timeouts are particularly tricky in that they might not be monotonically
-/// scheduled... TBD
-pub struct Server {
-    id: usize,
+pub struct ServerBuilder {
+    pub id: usize,
 
     ns_per_byte: u64,
     latency_ns: u64,
@@ -23,16 +19,9 @@ pub struct Server {
 
     in_queues: Vec<Consumer<ModelEvent>>,
     out_queues: Vec<Producer<ModelEvent>>,
-
-    //tor_link: Producer<ModelEvent>,
-    //world_link: Producer<ModelEvent>,
-    //self_link: Producer<Event<ModelEvent>>,
-    flows: HashMap<usize, tcp::Flow>,
-
-    count: u64,
 }
 
-pub impl Connectable for &mut Server {
+impl Connectable for &mut ServerBuilder {
     fn id(&self) -> usize {
         self.id
     }
@@ -73,9 +62,9 @@ pub impl Connectable for &mut Server {
     }
 }
 
-impl Server {
+impl ServerBuilder {
     // TODO document
-    pub fn new(id: usize) -> Server {
+    pub fn new(id: usize) -> ServerBuilder {
         let mut id_to_ix = HashMap::new();
         let mut ix_to_id = Vec::new();
 
@@ -94,7 +83,7 @@ impl Server {
 
         out_times.push(0);
 
-        Server {
+        ServerBuilder {
             id,
 
             ns_per_byte: 1,
@@ -106,10 +95,6 @@ impl Server {
 
             in_queues,
             out_queues,
-
-            flows: HashMap::new(),
-
-            count: 0,
         }
     }
 
@@ -126,48 +111,105 @@ impl Server {
         world_prod
     }
 
-    /// Starts the server, consuming it
-    ///
-    /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
-    /// This will almost certainly change to a function with no return value in the near future.
-    pub fn start(&mut self) -> u64 {
-        while self.advance() {}
-
-        return self.count;
-    }
-
-    //pub fn advance(&mut self, log: slog::Logger, start: Instant) -> bool {
-    pub fn advance(&mut self) -> bool {
-        //let log = log.new(o!("Server" => self.id));
-
-        // FIXME timeouts not yet implemented, let's keep this channel inactive
-        self.out_queues[0]
-            .push(Event {
-                event_type: EventType::Close,
-                //real_time: start.elapsed().as_nanos(),
-                src: self.id,
-                time: 1_000_000_000_000_000, // large value
-            })
-            .unwrap();
-
-        //info!(log, "start...");
-
-        let mut tor_time = 0;
-        let tor_q = &self.out_queues[1];
-        //let mut self_time = 0;
-
+    pub fn build(self) -> Server {
         let mut v = Vec::new();
         for id in &self.ix_to_id {
             v.push(*id);
         }
 
-        let mut q = Vec::new();
-        std::mem::swap(&mut q, &mut self.in_queues);
-        let merger = Merger::new(q, self.id, v);
+        let merger = Merger::new(self.in_queues, self.id, v);
 
-        for event in merger {
+        // Send null events to the ToR
+        self.out_queues[1]
+            .push(Event {
+                event_type: EventType::Null,
+                src: self.id,
+                time: self.latency_ns,
+            })
+            .unwrap();
+
+        // null event to ourselves...
+        self.out_queues[0]
+            .push(Event {
+                event_type: EventType::Null,
+                src: self.id,
+                time: 1_000_000_000_000_000,
+            })
+            .unwrap();
+
+        Server {
+            id: self.id,
+
+            ns_per_byte: self.ns_per_byte,
+            latency_ns: self.latency_ns,
+
+            out_queues: self.out_queues,
+
+            merger,
+
+            _ix_to_id: self.ix_to_id,
+
+            tor_time: 0,
+            count: 0,
+
+            flows: HashMap::new(),
+        }
+    }
+}
+
+/// Server-in-a-rack actor
+///
+/// The server has 3 neighbours: the top-of-rack switch, the outside world, and itself (for
+/// timeouts). Timeouts are particularly tricky in that they might not be monotonically
+/// scheduled... TBD
+pub struct Server {
+    pub id: usize,
+
+    ns_per_byte: u64,
+    latency_ns: u64,
+
+    merger: Merger<NetworkEvent>,
+    out_queues: Vec<Producer<ModelEvent>>,
+
+    _ix_to_id: Vec<usize>,
+
+    tor_time: u64,
+
+    flows: HashMap<usize, tcp::Flow>,
+
+    pub count: u64,
+}
+
+impl Server {
+    /// Starts the server, consuming it
+    ///
+    /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
+    /// This will almost certainly change to a function with no return value in the near future.
+    pub fn start(&mut self) -> u64 {
+        println!(" Server {} start", self.id);
+        while let ActorState::Continue = self.advance() {}
+
+        println!(" Server {} done", self.id);
+        return self.count;
+    }
+}
+
+impl Advancer for Server {
+    //pub fn advance(&mut self, log: slog::Logger, start: Instant) -> bool {
+    fn advance(&mut self) -> ActorState {
+        //info!(log, "start...");
+        //println!(" Server {} advance", self.id);
+
+        let tor_q = &self.out_queues[1];
+
+        // TODO figure out this whole loop thing?
+        //for event in self.merger {
+        while let Some(event) = self.merger.next() {
             self.count += 1;
-            //println!("@{} event #{}", event.time, self.count);
+            /*println!(
+                " Server {} @{}: <{} {:?}",
+                self.id, event.time, self._ix_to_id[event.src], event.event_type
+            );*/
             match event.event_type {
                 EventType::Close => {
                     // ensure everyone ignores us from now until close
@@ -207,7 +249,7 @@ impl Server {
                     // ToR
                     // equal because they might just need a jog, blocking happens in the
                     // iterator, so no infinite loop risk
-                    if tor_time < event.time {
+                    if self.tor_time < event.time {
                         //let cur_time = std::cmp::max(event.time, out_time);
                         tor_q
                             .push(Event {
@@ -219,15 +261,22 @@ impl Server {
                             .unwrap();
                         self.count += 1;
 
-                        tor_time = event.time;
+                        self.tor_time = event.time;
+                        /*println!(
+                            " Server {} @{}: Null({}) >{}",
+                            self.id,
+                            event.time,
+                            event.time + self.latency_ns,
+                            self._ix_to_id[1]
+                        );*/
                     }
-                    //std::thread::park_timeout();
-                    // TODO return here and put ourselves at the back of the queue
-                    //thread::yield_now();
-                    return true;
+
+                    // We're stalled, return so that we can be rescheduled later
+                    //println!(" Server {} stall", self.id);
+                    return ActorState::Continue;
                 }
 
-                EventType::Null => unreachable!(),
+                EventType::Null => {} //unreachable!(),
 
                 EventType::ModelEvent(net_event) => {
                     // both of these might schedule packets and timeouts
@@ -257,7 +306,7 @@ impl Server {
 
                     // send the packets
                     for p in packets {
-                        let tx_end = tor_time + self.ns_per_byte * p.size_byte;
+                        let tx_end = self.tor_time + self.ns_per_byte * p.size_byte;
                         let rx_end = tx_end + self.latency_ns;
 
                         let event = Event {
@@ -272,7 +321,7 @@ impl Server {
                         tor_q.push(event).unwrap();
 
                         // TODO move out of loop?
-                        tor_time = tx_end;
+                        self.tor_time = tx_end;
                     }
 
                     // TODO schedule the timeouts
@@ -284,7 +333,6 @@ impl Server {
         }
 
         //info!(log, "Server #{} done. {} pkts", self.id, self.count);
-        false
+        ActorState::Done(self.count)
     }
 }
-
