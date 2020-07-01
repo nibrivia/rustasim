@@ -236,7 +236,7 @@ impl Advancer for Router {
                 "Router {} @{}: <{} {:?}",
                 self.id, event.time, self.ix_to_id[event.src], event.event_type
             );*/
-            self.count += 1;
+            //self.count += 1;
             match event.event_type {
                 EventType::Close => {
                     // ensure everyone ignores us from now until close
@@ -272,7 +272,7 @@ impl Advancer for Router {
                                     time: event.time + self.latency_ns,
                                 })
                                 .unwrap();
-                            self.count += 1;
+                            //self.count += 1;
 
                             self.out_times[dst_ix] = event.time;
                         }
@@ -294,6 +294,7 @@ impl Advancer for Router {
                 EventType::Null => {} //unreachable!(),
 
                 EventType::ModelEvent(model_event) => {
+                    self.count += 1;
                     match model_event {
                         // this is only for servers, not routers
                         NetworkEvent::Flow(_flow) => unreachable!(),

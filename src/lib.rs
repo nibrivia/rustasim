@@ -139,7 +139,6 @@ impl World {
                     .push(Event {
                         src: 0,
                         time: 0,
-                        //real_time: 0,
                         event_type: EventType::ModelEvent(NetworkEvent::Flow(f)),
                     })
                     .unwrap();

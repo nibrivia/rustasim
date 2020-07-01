@@ -314,7 +314,6 @@ where
                 Err(_) => {
                     //if !self.stalled {
                     // return Stalled event
-                    self.stalled = true;
                     return Some(Event {
                         time: self.safe_time,
                         //real_time: self.start.elapsed().as_nanos(),
@@ -329,10 +328,7 @@ where
                         q.pop().unwrap()
                     }*/
                 }
-                Ok(event) => {
-                    self.stalled = false;
-                    event
-                }
+                Ok(event) => event,
             };
 
             // change the source id->ix now

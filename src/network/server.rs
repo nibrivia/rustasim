@@ -205,7 +205,7 @@ impl Advancer for Server {
         // TODO figure out this whole loop thing?
         //for event in self.merger {
         while let Some(event) = self.merger.next() {
-            self.count += 1;
+            //self.count += 1;
             /*println!(
                 " Server {} @{}: <{} {:?}",
                 self.id, event.time, self._ix_to_id[event.src], event.event_type
@@ -247,19 +247,15 @@ impl Advancer for Server {
                     */
 
                     // ToR
-                    // equal because they might just need a jog, blocking happens in the
-                    // iterator, so no infinite loop risk
-                    if self.tor_time < event.time {
-                        //let cur_time = std::cmp::max(event.time, out_time);
+                    if self.tor_time + self.latency_ns <= event.time {
                         tor_q
                             .push(Event {
                                 event_type: EventType::Null,
-                                //real_time: start.elapsed().as_nanos(),
                                 src: self.id,
                                 time: event.time + self.latency_ns,
                             })
                             .unwrap();
-                        self.count += 1;
+                        //self.count += 1;
 
                         self.tor_time = event.time;
                         /*println!(
@@ -279,6 +275,7 @@ impl Advancer for Server {
                 EventType::Null => {} //unreachable!(),
 
                 EventType::ModelEvent(net_event) => {
+                    self.count += 1;
                     // both of these might schedule packets and timeouts
                     let (packets, timeouts) = match net_event {
                         NetworkEvent::Flow(mut flow) => {
