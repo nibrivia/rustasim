@@ -21,7 +21,7 @@ fn main() {
     let duration = start.elapsed();
 
     let n_thread = counts.len();
-    let n_cpus = std::cmp::min(num_cpus::get(), n_thread);
+    let n_cpus = std::cmp::min(num_cpus::get() - 1, n_thread);
 
     // each ToR sends to n_racks-1 racks and n_racks-1 servers
     // each server (n_racks^2) is connected to 1 ToR
@@ -40,26 +40,26 @@ fn main() {
     let gbps = (n_links * 8 * time_limit) as f64 / 1e9 / duration.as_secs_f64();
 
     println!(
-        "= {} in {:.3}s. {} threads, {} cores",
+        "= {} in {:.3}s. {} actors, {} cores",
         sum_count,
         duration.as_secs_f32(),
         n_thread,
         n_cpus,
     );
     println!(
-        "  {:.3}M count/sec, {:.3}M /thread, {:.3}M /cpu",
+        "  {:.3}M count/sec, {:.3}M /actors, {:.3}M /cpu",
         (1e6 / ns_per_count as f64),
         (1e6 / (ns_per_count * n_thread as u128) as f64),
         (1e6 / (ns_per_count * n_cpus as u128) as f64),
     );
     println!(
-        "  {} ns/count, {} ns/thread, {} ns/cpu",
+        "  {} ns/count, {} ns/actor, {} ns/cpu",
         ns_per_count / 1000,
         ns_per_count * n_thread as u128 / 1000,
         ns_per_count * n_cpus as u128 / 1000
     );
     println!(
-        "  {:.3} gbps, {:.3} gbps/thread ({} links total)",
+        "  {:.3} gbps, {:.3} gbps/actor ({} links total)",
         gbps,
         (gbps / n_thread as f64),
         n_links
