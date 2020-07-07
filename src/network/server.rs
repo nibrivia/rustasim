@@ -290,6 +290,7 @@ impl Advancer for Server {
                                 flow.src_receive(packet)
                             } else {
                                 // this is data, send ack back
+                                // since we're only sending one packet, skip the return vectors
                                 packet.dst = packet.src;
                                 packet.src = self.id;
 
