@@ -34,9 +34,9 @@ pub struct Flow {
 }
 
 impl Flow {
-    pub fn new(src: usize, dst: usize, n_packets: u64) -> Flow {
+    pub fn new(flow_id: usize, src: usize, dst: usize, n_packets: u64) -> Flow {
         Flow {
-            flow_id: 0, // TODO add flow_id
+            flow_id,
             src,
             dst,
 

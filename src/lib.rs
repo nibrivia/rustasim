@@ -11,8 +11,8 @@ use std::collections::HashMap;
 //use std::sync::Arc;
 use std::thread;
 
-use slog::*;
-use slog_async;
+//use slog::*;
+//use slog_async;
 
 pub mod engine;
 pub mod logger;
@@ -123,6 +123,7 @@ impl World {
         }
 
         // Flows -----------------------------------------------
+        let mut flow_id = 0;
         for src_ix in 0..servers.len() {
             let src_id = (&mut servers[src_ix]).id;
 
@@ -134,7 +135,9 @@ impl World {
 
                 let dst_id = (&mut servers[dst_ix]).id;
 
-                let f = Flow::new(src_id, dst_id, 100000000);
+                let f = Flow::new(flow_id, src_id, dst_id, 100000000);
+                flow_id += 1;
+
                 chans[&src_id]
                     .push(Event {
                         src: 0,
@@ -170,6 +173,7 @@ impl World {
 
         // TODO think about where this should be
         // logger
+        /*
         let log_path = "out.log";
         let file = std::fs::OpenOptions::new()
             .create(true)
@@ -193,6 +197,7 @@ impl World {
         let log = Logger::root(drain.fuse(), o!());
 
         info!(log, "rx_time, tx_time, sim_time, id, src, type");
+        */
 
         // Workers
         let mut workers: Vec<Worker<Box<dyn Advancer + Send>>> = Vec::new();
