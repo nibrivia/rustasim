@@ -277,7 +277,7 @@ impl Advancer for Server {
                 EventType::ModelEvent(net_event) => {
                     self.count += 1;
                     // both of these might schedule packets and timeouts
-                    let (packets, timeouts) = match net_event {
+                    let (packets, _timeouts) = match net_event {
                         NetworkEvent::Flow(mut flow) => {
                             let start = flow.start();
                             self.flows.insert(flow.flow_id, flow);
@@ -302,34 +302,27 @@ impl Advancer for Server {
                     };
 
                     // send the packets
+                    let mut tx_end = self.tor_time;
                     for p in packets {
-                        let tx_end = self.tor_time + self.ns_per_byte * p.size_byte;
+                        tx_end += self.ns_per_byte * p.size_byte;
                         let rx_end = tx_end + self.latency_ns;
 
                         let event = Event {
                             event_type: EventType::ModelEvent(NetworkEvent::Packet(p)),
-                            //real_time: start.elapsed().as_nanos(),
-                            //real_time: 0,
                             src: self.id,
                             time: rx_end,
                         };
 
-                        // actually send the packet :)
                         tor_q.push(event).unwrap();
-
-                        // TODO move out of loop?
-                        self.tor_time = tx_end;
                     }
+
+                    self.tor_time = tx_end;
 
                     // TODO schedule the timeouts
-                    for _ in timeouts {
-                        // self_q.push(...)
-                    }
                 }
             }
         }
 
-        //info!(log, "Server #{} done. {} pkts", self.id, self.count);
         ActorState::Done(self.count)
     }
 }

@@ -284,9 +284,11 @@ impl Advancer for Router {
                             self.ix_to_id[dst_ix]
                         );*/
                     }
-                    // TODO return here and put ourselves at the back of the queue
-                    //thread::yield_now();
-                    //println!("Router {} stall", self.id);
+
+                    // Return, unless we just did
+                    //if event.time > self.last_time {
+                    //self.last_time = event.time;
+                    //}
                     return ActorState::Continue;
                 }
 

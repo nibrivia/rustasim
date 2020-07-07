@@ -7,7 +7,7 @@ pub mod routing;
 pub mod server;
 pub mod tcp;
 
-const Q_SIZE: usize = 12800;
+const Q_SIZE: usize = 512;
 
 /// Datacenter network model events
 pub enum NetworkEvent {
