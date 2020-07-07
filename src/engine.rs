@@ -318,21 +318,12 @@ where
             // get the new candidate
             let mut new_winner_e = match q.pop() {
                 Err(_) => {
-                    //if !self.stalled {
-                    // return Stalled event
                     Event {
                         time: self.safe_time,
                         //real_time: self.start.elapsed().as_nanos(),
                         src: self.winner_q,
                         event_type: EventType::Stalled,
                     }
-                    /*} else {
-                        // blocking wait
-                        q.wait();
-                        //while q.len() == 0 {}
-                        self.stalled = false;
-                        q.pop().unwrap()
-                    }*/
                 }
                 Ok(event) => event,
             };
@@ -349,8 +340,8 @@ where
                 if cur_loser_t < new_winner_e.time {
                     mem::swap(&mut new_winner_e, &mut self.loser_e[index]);
                 } else if cur_loser_t == new_winner_e.time {
+                    // if there's a tie, the Stalled event looses
                     if let EventType::Stalled = new_winner_e.event_type {
-                        // swap event
                         mem::swap(&mut new_winner_e, &mut self.loser_e[index]);
                     }
                 }

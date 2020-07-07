@@ -10,7 +10,7 @@ fn main() {
     //                      s  ms  us  ns
     let time_limit: u64 = 000_111_111_000;
 
-    let n_racks = 4;
+    let n_racks = 5;
 
     println!("Setup...");
     let world = World::new(n_racks);
