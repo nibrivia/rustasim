@@ -296,7 +296,21 @@ impl Advancer for Server {
                                 packet.is_ack = true;
                                 packet.size_byte = 10;
 
-                                (vec![packet], vec![])
+                                let tx_end = self.tor_time + self.ns_per_byte * packet.size_byte;
+                                let rx_end = tx_end + self.latency_ns;
+
+                                tor_q
+                                    .push(Event {
+                                        event_type: EventType::ModelEvent(NetworkEvent::Packet(
+                                            packet,
+                                        )),
+                                        src: self.id,
+                                        time: rx_end,
+                                    })
+                                    .unwrap();
+
+                                self.tor_time = tx_end;
+                                continue;
                             }
                         }
                     };
