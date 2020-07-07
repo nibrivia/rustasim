@@ -261,7 +261,7 @@ impl Advancer for Router {
                         let out_time = self.out_times[dst_ix];
                         // equal because they might just need a jog, blocking happens in the
                         // iterator, so no infinite loop risk
-                        if out_time + self.latency_ns <= event.time {
+                        if out_time < event.time {
                             //let cur_time = std::cmp::max(event.time, out_time);
                             self.out_queues[dst_ix]
                                 .push(Event {

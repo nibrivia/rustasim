@@ -247,7 +247,7 @@ impl Advancer for Server {
                     */
 
                     // ToR
-                    if self.tor_time + self.latency_ns <= event.time {
+                    if self.tor_time < event.time {
                         tor_q
                             .push(Event {
                                 event_type: EventType::Null,

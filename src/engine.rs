@@ -92,6 +92,14 @@ impl<U> Eq for Event<U> {}
 ///
 /// The events returned by `Merger` are monotonically increasing and come from either neighbours,
 /// or from the Merger itself upon a potential Stall.
+///
+/// # Examples
+///
+/// ```
+/// // empty model for testing
+/// // TODO
+///
+/// ```
 #[derive(Debug)]
 pub struct Merger<U> {
     id: usize,
@@ -312,12 +320,12 @@ where
                 Err(_) => {
                     //if !self.stalled {
                     // return Stalled event
-                    return Some(Event {
+                    Event {
                         time: self.safe_time,
                         //real_time: self.start.elapsed().as_nanos(),
                         src: self.winner_q,
                         event_type: EventType::Stalled,
-                    });
+                    }
                     /*} else {
                         // blocking wait
                         q.wait();
@@ -339,8 +347,12 @@ where
 
                 // The current loser wins, swap with our candidate, move up
                 if cur_loser_t < new_winner_e.time {
-                    // swap event
                     mem::swap(&mut new_winner_e, &mut self.loser_e[index]);
+                } else if cur_loser_t == new_winner_e.time {
+                    if let EventType::Stalled = new_winner_e.event_type {
+                        // swap event
+                        mem::swap(&mut new_winner_e, &mut self.loser_e[index]);
+                    }
                 }
 
                 index /= 2;
@@ -356,7 +368,7 @@ where
                 self.log,
                 "{},{},{},{:?}",
                 //new_winner_e.real_time,
-                new_winner_e.time,
+                new_winner_e.time,;
                 self.id,
                 self.ix_to_id[new_winner_e.src],
                 new_winner_e.event_type,
@@ -411,24 +423,28 @@ mod test_merger {
     fn test_merge_2() {
         test_interleave(2, 5);
         test_pushpop(2, 5);
+        test_ties(2, 5);
     }
 
     #[test]
     fn test_merge_4() {
         test_interleave(4, 10);
         test_pushpop(4, 10);
+        test_ties(4, 10);
     }
 
     #[test]
     fn test_merge_5() {
         test_interleave(5, 10);
         test_pushpop(5, 10);
+        test_ties(5, 10);
     }
 
     #[test]
     fn test_merge_7() {
         test_interleave(7, 10);
         test_pushpop(7, 10);
+        test_ties(7, 10);
     }
 
     #[test]
@@ -447,7 +463,16 @@ mod test_merger {
         }
     }
 
+    #[test]
+    fn test_merge_many_ties() {
+        for n_queues in 3..20 {
+            println!("{} queues =======================", n_queues);
+            test_ties(n_queues, n_queues + 5);
+        }
+    }
+
     fn test_interleave(n_queues: usize, n_events: usize) {
+        println!("Interleaving");
         // Create our event queues
         let mut prod_qs = Vec::new();
         let mut cons_qs = Vec::new();
@@ -526,7 +551,7 @@ mod test_merger {
 
         // checker vars
 
-        println!("Multithreaded pushing and popping events");
+        println!("\nMultithreaded pushing and popping events");
         let handle = thread::spawn(move || {
             // n_q*n_e events, 1 close event
             let expected_count = n_queues * n_events + 1;
@@ -574,7 +599,7 @@ mod test_merger {
                     src,
                     event_type: EventType::ModelEvent(EmptyModel::None),
                 };
-                //println!("  {} <- {:?}", i, e);
+                println!("  {} <- {:?}", i, e);
                 prod.push(e).unwrap();
                 thread::sleep(time::Duration::from_micros(1));
             }
@@ -589,5 +614,83 @@ mod test_merger {
         }
 
         handle.join().unwrap();
+    }
+
+    fn test_ties(n_queues: usize, n_events: usize) {
+        println!("\nTie checking");
+        // Create our event queues
+        let mut prod_qs = Vec::new();
+        let mut cons_qs = Vec::new();
+
+        for _ in 0..n_queues {
+            let (prod, cons) = spsc::new(128);
+            prod_qs.push(prod);
+            cons_qs.push(cons);
+        }
+
+        // Merger
+        let mut merger = Merger::<EmptyModel>::new(cons_qs, 0, vec![]);
+
+        let mut cur_time = 0;
+
+        let mut success = true;
+
+        for time in 0..n_events {
+            println!("\nPushing events @{}", time);
+            for (ix, prod) in prod_qs.iter().enumerate() {
+                let e = Event {
+                    time: time as u64,
+                    src: ix,
+                    event_type: EventType::ModelEvent(EmptyModel::None),
+                };
+                println!("  {} <- {:?}", ix, e);
+                prod.push(e).unwrap();
+            }
+
+            println!("Popping events");
+
+            let mut event_count = 0;
+            while let Some(event) = merger.next() {
+                // break if we're stalled
+                if let EventType::Stalled = event.event_type {
+                    // current time -> we're done
+                    if event.time == time as u64 {
+                        break;
+                    }
+
+                    // past time
+                    //continue;
+                }
+
+                println!("    => {:?}", event);
+
+                // check time invariant
+                assert!(
+                    cur_time <= event.time,
+                    "Time invariant violated. Previous event was @{}, current event @{}",
+                    cur_time,
+                    event.time
+                );
+
+                // update state
+                cur_time = event.time;
+                if let EventType::Stalled = event.event_type {
+                } else {
+                    event_count += 1;
+                }
+            }
+
+            // check all our messages got out
+            success = success && event_count == n_queues;
+
+            println!(
+                //n_queues, event_count,
+                "Expected {} events, saw {}",
+                n_queues,
+                event_count
+            );
+        }
+
+        assert!(success);
     }
 }
