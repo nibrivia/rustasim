@@ -266,8 +266,6 @@ impl Advancer for Router {
                             self.out_queues[dst_ix]
                                 .push(Event {
                                     event_type: EventType::Null,
-                                    //real_time: start.elapsed().as_nanos(),
-                                    //real_time: 0,
                                     src: self.id,
                                     time: event.time + self.latency_ns,
                                 })
@@ -304,6 +302,14 @@ impl Advancer for Router {
                         NetworkEvent::Packet(packet) => {
                             // Next step
                             let next_hop_ix = self.route[packet.dst];
+
+                            // drop packet if our outgoing queue is full
+                            if event.time
+                                > self.out_times[next_hop_ix] + 10 * 1500 * self.ns_per_byte
+                            {
+                                println!("Router {} drop {:?}", self.id, packet);
+                                continue;
+                            }
 
                             // when
                             let cur_time = std::cmp::max(event.time, self.out_times[next_hop_ix]);
