@@ -168,7 +168,7 @@ pub struct Server {
     ns_per_byte: u64,
     latency_ns: u64,
 
-    merger: Merger<NetworkEvent>,
+    merger: Merger<u64, NetworkEvent>,
     out_queues: Vec<Producer<ModelEvent>>,
 
     _ix_to_id: Vec<usize>,

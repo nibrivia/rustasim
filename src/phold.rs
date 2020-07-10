@@ -9,24 +9,26 @@ use std::time::Instant;
 use crate::engine::*;
 use crate::worker::{ActorState, Advancer};
 
+type Time = u64;
+
 const Q_SIZE: usize = 64;
-const T_MULT: u64 = 8;
-const LOOKAHEAD: u64 = 1 * T_MULT;
+const T_MULT: Time = 8 as Time;
+const LOOKAHEAD: Time = 1 as Time * T_MULT;
 
 /// Generic event
 type PHOLDEvent = ();
 
-pub type FullEvent = crate::engine::Event<PHOLDEvent>;
+pub type FullEvent = crate::engine::Event<Time, PHOLDEvent>;
 
 /// PHOLD actor
 struct Actor {
     pub id: usize,
-    time_limit: u64,
+    time_limit: Time,
     unif: Uniform<usize>,
 
-    merger: Merger<PHOLDEvent>,
+    merger: Merger<Time, PHOLDEvent>,
     out_queues: Vec<Producer<FullEvent>>,
-    out_times: Vec<u64>,
+    out_times: Vec<Time>,
 
     //_ix_to_id: Vec<usize>,
     pub count: u64,
@@ -37,7 +39,7 @@ impl Actor {
         id: usize,
         out_queues: Vec<Producer<FullEvent>>,
         in_queues: Vec<Consumer<FullEvent>>,
-        time_limit: u64,
+        time_limit: Time,
     ) -> Actor {
         let mut _ix_to_id = Vec::new();
         let mut out_times = Vec::new();
@@ -125,7 +127,7 @@ impl Advancer for Actor {
                     let dst_ix = self.unif.sample(&mut rng);
 
                     let cur_time = std::cmp::max(self.out_times[dst_ix], event.time);
-                    let dst_time = cur_time + 10 * T_MULT;
+                    let dst_time = cur_time + 10 as Time * T_MULT;
 
                     //event.src = self.id;
                     event.time = dst_time + LOOKAHEAD;
@@ -169,7 +171,7 @@ pub fn transpose<T>(in_vector: Vec<Vec<T>>) -> Vec<Vec<T>> {
     result
 }
 
-pub fn run(n_actors: usize, mut time_limit: u64, n_threads: usize) {
+pub fn run(n_actors: usize, mut time_limit: Time, n_threads: usize) {
     time_limit *= T_MULT;
     println!("Setup...");
 

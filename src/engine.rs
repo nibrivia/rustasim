@@ -17,7 +17,6 @@
 // TODO description of when the null-message should be sent and what it should look like
 
 use crossbeam_queue::spsc;
-use std::cmp::Ordering;
 use std::mem;
 
 // TODO update description to match the parametrized Events we have
@@ -62,31 +61,36 @@ pub enum EventType<U> {
 ///
 /// Events are ordered by their time.
 #[derive(Debug)]
-pub struct Event<U> {
-    pub time: u64,
+pub struct Event<T, U>
+where
+    T: Ord + Copy + num::Zero,
+{
+    pub time: T,
     //pub real_time: u128,
     pub src: usize,
     pub event_type: EventType<U>,
 }
 
-impl<U> Ord for Event<U> {
+/*
+impl<T, U> Ord for Event<T, U> {
     fn cmp(&self, other: &Self) -> Ordering {
         other.time.cmp(&self.time)
     }
 }
 
-impl<U> PartialOrd for Event<U> {
+impl<T, U> PartialOrd for Event<T, U> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<U> PartialEq for Event<U> {
+impl<T, U> PartialEq for Event<T, U> {
     fn eq(&self, other: &Self) -> bool {
         self.time == other.time
     }
 }
-impl<U> Eq for Event<U> {}
+impl<T, U> Eq for Event<T, U> {}
+*/
 
 /// Manages the input queues and returns the next [`Event`](struct.Event.html) to be processed.
 ///
@@ -101,21 +105,24 @@ impl<U> Eq for Event<U> {}
 ///
 /// ```
 #[derive(Debug)]
-pub struct Merger<U> {
+pub struct Merger<T, U>
+where
+    T: Ord + Copy + num::Zero,
+{
     id: usize,
     //start: Instant,
     // the input queues
-    in_queues: Vec<spsc::Consumer<Event<U>>>,
+    in_queues: Vec<spsc::Consumer<Event<T, U>>>,
     n_layers: usize,
 
     paths: Vec<usize>,
 
     // the queue to pull from
     winner_q: usize,
-    safe_time: u64,
+    safe_time: T,
 
     // the loser queue
-    loser_e: Vec<Event<U>>,
+    loser_e: Vec<Event<T, U>>,
 
     // logger
     //log: slog::Logger,
@@ -192,24 +199,25 @@ fn ltr_walk(n_nodes: usize) -> Vec<usize> {
     indices
 }
 
-impl<U> Merger<U>
+impl<T, U> Merger<T, U>
 where
     U: std::fmt::Debug,
+    T: Ord + Copy + num::Zero,
 {
     /// Builds a new merger from a set of input queues
     pub fn new(
-        in_queues: Vec<spsc::Consumer<Event<U>>>,
+        in_queues: Vec<spsc::Consumer<Event<T, U>>>,
         id: usize,
         ix_to_id: Vec<usize>,
         //log: slog::Logger,
         //start: Instant,
-    ) -> Merger<U> {
+    ) -> Merger<T, U> {
         let mut loser_e = Vec::new();
         let winner_q = 0;
 
         // index 0 never gets used
         loser_e.push(Event {
-            time: 0,
+            time: T::zero(),
             //real_time: 0,
             event_type: EventType::Null,
             src: 0,
@@ -219,7 +227,7 @@ where
         // fill with placeholders
         for i in 1..in_queues.len() {
             loser_e.push(Event {
-                time: 0,
+                time: T::zero(),
                 //real_time: 0,
                 event_type: EventType::Null,
                 src: i,
@@ -229,7 +237,7 @@ where
         // appropriately set the source
         for (loser, ix) in ltr_walk(in_queues.len()).iter().enumerate() {
             loser_e[*ix] = Event {
-                time: 0,
+                time: T::zero(),
                 //real_time: 0,
                 event_type: EventType::Null,
                 src: loser + 1,
@@ -277,7 +285,7 @@ where
             n_layers,
 
             winner_q,
-            safe_time: 0,
+            safe_time: T::zero(),
 
             paths,
 
@@ -289,7 +297,7 @@ where
     }
 
     /// Non-blocking next event. Used for testing.
-    fn _try_pop(&mut self) -> Option<Event<U>> {
+    fn _try_pop(&mut self) -> Option<Event<T, U>> {
         if !self.in_queues[self.winner_q].is_empty() {
             self.next()
         } else {
@@ -298,11 +306,12 @@ where
     }
 }
 
-impl<U> Iterator for Merger<U>
+impl<T, U> Iterator for Merger<T, U>
 where
     U: std::fmt::Debug,
+    T: Ord + Copy + num::Zero,
 {
-    type Item = Event<U>;
+    type Item = Event<T, U>;
 
     // blocks until it has something to return
     fn next(&mut self) -> Option<Self::Item> {
@@ -485,7 +494,7 @@ mod test_merger {
         }
 
         // Merger
-        let mut merger = Merger::<EmptyModel>::new(cons_qs, 0, vec![]);
+        let mut merger = Merger::<u64, EmptyModel>::new(cons_qs, 0, vec![]);
 
         //prod_qs
         println!("Pushing events");
@@ -548,7 +557,7 @@ mod test_merger {
         }
 
         // Merger
-        let mut merger = Merger::<EmptyModel>::new(cons_qs, 0, vec![]);
+        let mut merger = Merger::<u64, EmptyModel>::new(cons_qs, 0, vec![]);
 
         // checker vars
 
@@ -630,7 +639,7 @@ mod test_merger {
         }
 
         // Merger
-        let mut merger = Merger::<EmptyModel>::new(cons_qs, 0, vec![]);
+        let mut merger = Merger::<u64, EmptyModel>::new(cons_qs, 0, vec![]);
 
         let mut cur_time = 0;
 

@@ -195,7 +195,7 @@ pub struct Router {
 
     ix_to_id: Vec<usize>,
 
-    merger: Merger<NetworkEvent>,
+    merger: Merger<u64, NetworkEvent>,
 
     // event management
     out_queues: Vec<Producer<ModelEvent>>,

@@ -35,7 +35,7 @@ impl std::fmt::Debug for NetworkEvent {
     }
 }
 
-pub type ModelEvent = crate::engine::Event<NetworkEvent>;
+pub type ModelEvent = crate::engine::Event<u64, NetworkEvent>;
 
 /// Device types
 #[derive(Debug)]

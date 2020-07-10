@@ -11,6 +11,7 @@ crossbeam-queue = { git = "https://github.com/nibrivia/crossbeam.git" , branch =
 #crossbeam-queue = { path = "/home/nibr/crossbeam/crossbeam-queue" }
 crossbeam-deque = "0.7"
 rand = "0.7.3"
+num = "0.3"
 #chrono = "0.4"
 num_cpus = "1.13.0"
 
