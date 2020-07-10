@@ -17,6 +17,7 @@ use std::thread;
 pub mod engine;
 pub mod logger;
 pub mod network;
+pub mod phold;
 pub mod worker;
 
 use crate::engine::*;
@@ -51,7 +52,7 @@ impl World {
 
         // Use to keep track of ID numbers and make them continuous
         let mut next_id = 1;
-        let mut network = Network::new();
+        let mut network = Network::new(); // for routing
 
         // TODO backbone switches
 
@@ -263,4 +264,79 @@ impl World {
 
         counts
     }
+}
+
+/// Starts the actors on `num_cpus` workers
+///
+/// This function takes care of all the necessary building of the workers and connecting to launch
+/// them
+// TODO check if we can remove dynamic dispatch in simple cases
+pub fn start(num_cpus: usize, actors: Vec<Box<dyn Advancer + Send>>) -> Vec<u64> {
+    // Workers
+    let mut workers: Vec<Worker<Box<dyn Advancer + Send>>> = Vec::new();
+    let mut stealers = Vec::new();
+    for _ in 0..num_cpus {
+        let w = Worker::new_fifo();
+        stealers.push(w.stealer());
+        workers.push(w);
+    }
+
+    // Create the inter-worker ring
+    let mut prods = Vec::new();
+    let mut cons = Vec::new();
+    for _ in 0..num_cpus {
+        let (p, c) = spsc::new(128);
+        prods.push(p);
+        cons.push(c);
+    }
+
+    // shift the producers and comsumers over by 1
+    let p = prods.pop().unwrap();
+    prods.push(p);
+
+    // distributed the actors to all the workers
+    let mut cur_worker = 0;
+    for a in actors {
+        workers[cur_worker].push(a);
+        cur_worker = (cur_worker + 1) % num_cpus;
+    }
+
+    // Start the workers
+    let mut handles = Vec::new();
+    let mut i = 0;
+    for mut w in workers {
+        // The local stealers need to be appropriately ordered
+        // TODO double-check this
+        let mut local_stealers = Vec::new();
+        i += 1;
+        for j in i..stealers.len() {
+            local_stealers.push(stealers[j].clone());
+        }
+        for j in 0..i {
+            local_stealers.push(stealers[j].clone());
+        }
+
+        if local_stealers.len() != stealers.len() {
+            unreachable!();
+        }
+
+        // TODO better names
+        let prev = cons.pop().unwrap();
+        let next = prods.pop().unwrap();
+
+        // start this worker
+        handles.push(
+            //let injector = Arc::clone(&injector);
+            thread::spawn(move || run(i, &mut w, prev, next, local_stealers)),
+        );
+    }
+
+    // Wait for the workers to be done
+    let mut counts = Vec::new();
+    for h in handles {
+        let local_counts: Vec<u64> = h.join().unwrap();
+        counts.extend(local_counts);
+    }
+
+    counts
 }

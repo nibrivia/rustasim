@@ -342,7 +342,10 @@ where
                 } else if cur_loser_t == new_winner_e.time {
                     // if there's a tie, the Stalled event looses
                     if let EventType::Stalled = new_winner_e.event_type {
+                        //if let EventType::Stalled = self.loser_e[index].event_type {
+                        //} else {
                         mem::swap(&mut new_winner_e, &mut self.loser_e[index]);
+                        //}
                     }
                 }
 
