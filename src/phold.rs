@@ -4,6 +4,7 @@ use crossbeam_queue::spsc;
 use crossbeam_queue::spsc::{Consumer, Producer};
 use rand;
 use rand::distributions::{Distribution, Uniform};
+use rand_distr::Exp;
 use std::time::Instant;
 
 use crate::engine::*;
@@ -11,8 +12,8 @@ use crate::worker::{ActorState, Advancer};
 
 type Time = u64;
 
-const Q_SIZE: usize = 64;
-const T_MULT: Time = 8 as Time;
+const Q_SIZE: usize = 128;
+const T_MULT: Time = 1024 as Time;
 const LOOKAHEAD: Time = 1 as Time * T_MULT;
 
 /// Generic event
@@ -93,9 +94,10 @@ impl Advancer for Actor {
 
             if event.time > self.time_limit {
                 break;
-            }
+            }0
 
             let mut rng = rand::thread_rng();
+            let exp = Exp::new(1.0).unwrap();
             match event.event_type {
                 EventType::Close => unreachable!(),
                 EventType::Null => unreachable!(),
@@ -127,7 +129,7 @@ impl Advancer for Actor {
                     let dst_ix = self.unif.sample(&mut rng);
 
                     let cur_time = std::cmp::max(self.out_times[dst_ix], event.time);
-                    let dst_time = cur_time + 10 as Time * T_MULT;
+                    let dst_time = cur_time + (exp.sample(&mut rng) as f64 * T_MULT as f64) as Time;
 
                     //event.src = self.id;
                     event.time = dst_time + LOOKAHEAD;
