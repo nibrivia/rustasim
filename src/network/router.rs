@@ -211,20 +211,20 @@ pub struct Router {
 impl Router {
     pub fn start(&mut self) -> u64 {
         println!("Router {} start", self.id);
-        while let ActorState::Continue = self.advance() {}
+        while let ActorState::Continue(_) = self.advance() {}
 
         println!("Router {} done", self.id);
         return self.count;
     }
 }
 
-impl Advancer for Router {
+impl Advancer<u64> for Router {
     /// Starts the rack, consumes the object
     ///
     /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
     /// This will almost certainly change to a function with no return value in the near future.
     //pub fn start(&mut self, log: slog::Logger, start: Instant) -> u64 {
-    fn advance(&mut self) -> ActorState {
+    fn advance(&mut self) -> ActorState<u64> {
         //println!("Router {} advancing", self.id);
         //let log = log.new(o!("Router" => self.id));
         //info!(log, "start...");
@@ -287,7 +287,7 @@ impl Advancer for Router {
                     //if event.time > self.last_time {
                     //self.last_time = event.time;
                     //}
-                    return ActorState::Continue;
+                    return ActorState::Continue(event.time);
                 }
 
                 // This is a message from neighbour we were waiting on, it has served its purpose

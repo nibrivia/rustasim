@@ -187,16 +187,16 @@ impl Server {
     /// This will almost certainly change to a function with no return value in the near future.
     pub fn start(&mut self) -> u64 {
         println!(" Server {} start", self.id);
-        while let ActorState::Continue = self.advance() {}
+        while let ActorState::Continue(_) = self.advance() {}
 
         println!(" Server {} done", self.id);
         return self.count;
     }
 }
 
-impl Advancer for Server {
+impl Advancer<u64> for Server {
     //pub fn advance(&mut self, log: slog::Logger, start: Instant) -> bool {
-    fn advance(&mut self) -> ActorState {
+    fn advance(&mut self) -> ActorState<u64> {
         //info!(log, "start...");
         //println!(" Server {} advance", self.id);
 
@@ -259,7 +259,7 @@ impl Advancer for Server {
 
                         self.tor_time = event.time;
                         /*println!(
-                            " Server {} @{}: Null({}) >{}",
+                            "next Server {} @{}: Null({}) >{}",
                             self.id,
                             event.time,
                             event.time + self.latency_ns,
@@ -269,7 +269,7 @@ impl Advancer for Server {
 
                     // We're stalled, return so that we can be rescheduled later
                     //println!(" Server {} stall", self.id);
-                    return ActorState::Continue;
+                    return ActorState::Continue(event.time);
                 }
 
                 EventType::Null => {} //unreachable!(),

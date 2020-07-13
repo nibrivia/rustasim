@@ -14,71 +14,101 @@
 //! any more progress, and can be called repeatedly. This module can take these "advanceables"
 //! (trait?) and schedule them via crossbeam's work-stealing queue (insert link).
 
-use crossbeam_deque::{Steal, Stealer, Worker};
-use crossbeam_queue::spsc::{Consumer, Producer};
-//use std::sync::Arc;
+use atomic_counter::{AtomicCounter, RelaxedCounter};
+//use crossbeam_deque::{Steal, Stealer, Worker};
+//use crossbeam_queue::spsc::{Consumer, Producer};
+//use crossbeam_utils::Backoff;
+use crate::FrozenActor;
+use std::collections::BinaryHeap;
+use std::fmt::Debug;
+use std::sync::{Arc, Mutex};
 
-pub enum ActorState {
-    Continue,
+#[derive(Debug)]
+pub enum ActorState<T>
+where
+    T: Ord + Copy + num::Zero,
+{
+    Continue(T),
     Done(u64),
 }
 
 /// Advancer trait to be implemented by the simulation actors
 ///
 /// The advancer trait allows the workers to pick up the actors and keep them going
-pub trait Advancer {
+pub trait Advancer<T>
+where
+    T: Ord + Copy + num::Zero,
+{
     /// Advances this actor until it can no longer.
     ///
     /// The return value indicates whether it should get rescheduled or no. `true` reschedules,
     /// `false` assumes it is done.
-    fn advance(&mut self) -> ActorState;
+    fn advance(&mut self) -> ActorState<T>;
 }
 
 /// Runs until no more progress can be made at all...
 ///
 /// TODO: pulled from crossbeam's documentation, figure more about how it works
-pub fn run(
+pub fn run<T: Ord + Copy + Debug + num::Zero>(
     id: usize,
-    local: &Worker<Box<dyn Advancer + Send>>,
-    prev: Consumer<Box<dyn Advancer + Send>>,
-    next: Producer<Box<dyn Advancer + Send>>,
+    counter: Arc<RelaxedCounter>,
+    n_tasks: usize,
+    task_heap: Arc<Mutex<BinaryHeap<FrozenActor<T>>>>,
+    //local: &Worker<Box<dyn Advancer + Send>>,
+    //prev: Consumer<Box<dyn Advancer + Send>>,
+    //next: Producer<Box<dyn Advancer + Send>>,
     //global: Arc<Injector<Box<dyn Advancer + Send>>>,
-    stealers: Vec<Stealer<Box<dyn Advancer + Send>>>,
+    //stealers: Vec<Stealer<Box<dyn Advancer + Send>>>,
 ) -> Vec<u64> {
     println!("{} start", id);
     let mut counts = Vec::new();
     loop {
+        let task = task_heap.lock().unwrap().pop();
+
+        /*
         while let Ok(task) = prev.pop() {
             local.push(task);
         }
 
         let mut task: Option<Box<dyn Advancer + Send>> = local.pop();
+        if let Some(_) = task {
+            //println!("{} got local", id);
+        }
 
         // Try first to steal from our neighbours, in reverse order
-        if let None = task {
-            for _ in 0..2 {
-                if let Some(_) = task {
-                    break;
+        let backoff = Backoff::new();
+        while let None = task {
+            while let Ok(task) = prev.pop() {
+                local.push(task);
+            }
+
+            task = local.pop();
+            if let Some(_) = task {
+                //println!("{} got local", id);
+                break;
+            }
+
+            for s in &stealers {
+                let mut r = s.steal();
+                while r.is_retry() {
+                    //println!("{} retry", id);
+                    r = s.steal();
                 }
 
-                for s in &stealers {
-                    let mut r = s.steal();
-                    while r.is_retry() {
-                        //println!("{} retry", id);
-                        r = s.steal();
+                match r {
+                    Steal::Empty => continue,
+                    Steal::Success(t) => {
+                        task = Some(t);
+                        //println!("{} got stolen", id);
+                        break;
                     }
-
-                    match r {
-                        Steal::Empty => continue,
-                        Steal::Success(t) => {
-                            task = Some(t);
-                            break;
-                        }
-                        Steal::Retry => unreachable!(),
-                    }
+                    Steal::Retry => unreachable!(),
                 }
             }
+
+            backoff.snooze();
         }
+        */
 
         /*local.pop().or_else(|| {
             // Otherwise, we need to look for a task elsewhere.
@@ -95,16 +125,26 @@ pub fn run(
             .and_then(|s| s.success())
         });*/
 
-        if let Some(mut actor) = task {
+        if let Some(mut frozen_actor) = task {
             //println!("{} task start", id);
-            match actor.advance() {
-                ActorState::Continue => next.push(actor).unwrap(),
-                ActorState::Done(count) => counts.push(count),
+            match frozen_actor.actor.advance() {
+                ActorState::Continue(time) => {
+                    frozen_actor.time = time;
+                    task_heap.lock().unwrap().push(frozen_actor);
+                }
+                ActorState::Done(count) => {
+                    counts.push(count);
+                    counter.inc();
+                }
             }
         //println!("{} task done", id);
         } else {
-            println!("{} finished", id);
-            return counts;
+            if counter.get() == n_tasks {
+                println!("{} finished", id);
+                return counts;
+            } else {
+                println!("{} {}/{} done", id, counter.get(), n_tasks);
+            }
         }
     }
 }

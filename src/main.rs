@@ -3,5 +3,5 @@ use rustasim::phold;
 
 fn main() {
     let n_cpus = num_cpus::get() - 1;
-    phold::run(8 * 8, 10_000, n_cpus);
+    phold::run(7 * 8, 100_000, n_cpus);
 }

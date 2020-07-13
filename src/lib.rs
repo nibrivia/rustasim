@@ -4,11 +4,14 @@
 //! engine](synchronizer/index.html) and the model. In general, the engine should be agnostic to
 //! the type of model being run, and should probably eventually be pulled out into its own crate.
 
-use crossbeam_deque::Worker;
+use atomic_counter::RelaxedCounter;
+//use crossbeam_deque::Worker;
 use crossbeam_queue::spsc;
 use crossbeam_queue::spsc::*;
-use std::collections::HashMap;
-//use std::sync::Arc;
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap};
+use std::fmt::Debug;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 //use slog::*;
@@ -20,11 +23,11 @@ pub mod network;
 pub mod phold;
 pub mod worker;
 
-use crate::engine::*;
+//use crate::engine::*;
 use crate::network::router::{Router, RouterBuilder};
-use crate::network::routing::{route_id, Network};
+//use crate::network::routing::{route_id, Network};
 use crate::network::server::{Server, ServerBuilder};
-use crate::network::tcp::*;
+//use crate::network::tcp::*;
 use crate::network::{Connectable, ModelEvent, NetworkEvent};
 use crate::worker::{run, Advancer};
 
@@ -47,6 +50,7 @@ pub struct World {
 impl World {
     /// Sets up a world ready for simulation
     pub fn new(n_racks: usize) -> World {
+        /*
         // TODO pass as argument
         let servers_per_rack = n_racks - 1;
 
@@ -148,12 +152,13 @@ impl World {
                     .unwrap();
             }
         }
+        */
 
         // return world
         World {
-            racks,
-            servers,
-            chans,
+            racks: vec![],
+            servers: vec![],
+            chans: HashMap::new(),
         }
     }
 
@@ -161,6 +166,7 @@ impl World {
     ///
     /// This will spawn a thread per actor and wait for all of them to end.
     pub fn start(mut self, num_cpus: usize, done: u64) -> Vec<u64> {
+        /*
         // Tell everyone when the end is
         for (_, c) in self.chans.iter_mut() {
             c.push(Event {
@@ -233,6 +239,7 @@ impl World {
         let mut handles = Vec::new();
         //let injector = Arc::new(injector);
         let mut i = 0;
+        let shared_counter = RelaxedCounter::new(0);
         for mut w in workers {
             let mut local_stealers = Vec::new();
             i += 1;
@@ -252,7 +259,7 @@ impl World {
 
             handles.push(
                 //let injector = Arc::clone(&injector);
-                thread::spawn(move || run(i, &mut w, prev, next, local_stealers)),
+                thread::spawn(move || run(i, shared_counter, &mut w, prev, next, local_stealers)),
             );
         }
 
@@ -263,17 +270,59 @@ impl World {
         }
 
         counts
+            */
+        vec![]
     }
 }
+
+pub struct FrozenActor<T>
+where
+    T: Ord + Copy + num::Zero,
+{
+    time: T,
+    actor: Box<dyn Advancer<T> + Send>,
+}
+
+impl<T> Ord for FrozenActor<T>
+where
+    T: Ord + Copy + num::Zero,
+{
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.time.cmp(&self.time)
+    }
+}
+
+impl<T> PartialOrd for FrozenActor<T>
+where
+    T: Ord + Copy + num::Zero,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(other.time.cmp(&self.time))
+    }
+}
+
+impl<T> PartialEq for FrozenActor<T>
+where
+    T: Ord + Copy + num::Zero,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.time == other.time
+    }
+}
+impl<T> Eq for FrozenActor<T> where T: Ord + Copy + num::Zero {}
 
 /// Starts the actors on `num_cpus` workers
 ///
 /// This function takes care of all the necessary building of the workers and connecting to launch
 /// them
 // TODO check if we can remove dynamic dispatch in simple cases
-pub fn start(num_cpus: usize, actors: Vec<Box<dyn Advancer + Send>>) -> Vec<u64> {
+pub fn start<T: 'static + Ord + Copy + Debug + Send + num::Zero>(
+    num_cpus: usize,
+    actors: Vec<Box<dyn Advancer<T> + Send>>,
+) -> Vec<u64> {
+    /*
     // Workers
-    let mut workers: Vec<Worker<Box<dyn Advancer + Send>>> = Vec::new();
+    let mut workers: Vec<Worker<Box<dyn Advancer<T> + Send>>> = Vec::new();
     let mut stealers = Vec::new();
     for _ in 0..num_cpus {
         let w = Worker::new_fifo();
@@ -291,7 +340,7 @@ pub fn start(num_cpus: usize, actors: Vec<Box<dyn Advancer + Send>>) -> Vec<u64>
     }
 
     // shift the producers and comsumers over by 1
-    let p = prods.pop().unwrap();
+    let p = prods.remove(0);
     prods.push(p);
 
     // distributed the actors to all the workers
@@ -300,13 +349,25 @@ pub fn start(num_cpus: usize, actors: Vec<Box<dyn Advancer + Send>>) -> Vec<u64>
         workers[cur_worker].push(a);
         cur_worker = (cur_worker + 1) % num_cpus;
     }
+    */
 
     // Start the workers
     let mut handles = Vec::new();
-    let mut i = 0;
-    for mut w in workers {
+    let n_actors = actors.len();
+    let shared_counter = Arc::new(RelaxedCounter::new(0));
+    let task_heap = Arc::new(Mutex::new(BinaryHeap::new()));
+
+    for actor in actors {
+        let frozen = FrozenActor {
+            time: T::zero(),
+            actor,
+        };
+        task_heap.lock().unwrap().push(frozen);
+    }
+    for i in 0..num_cpus {
         // The local stealers need to be appropriately ordered
         // TODO double-check this
+        /*
         let mut local_stealers = Vec::new();
         i += 1;
         for j in i..stealers.len() {
@@ -319,15 +380,20 @@ pub fn start(num_cpus: usize, actors: Vec<Box<dyn Advancer + Send>>) -> Vec<u64>
         if local_stealers.len() != stealers.len() {
             unreachable!();
         }
+        */
 
         // TODO better names
-        let prev = cons.pop().unwrap();
-        let next = prods.pop().unwrap();
+        //let prev = cons.pop().unwrap();
+        //let next = prods.pop().unwrap();
+
+        let heap_clone = Arc::clone(&task_heap);
+        let counter_clone = Arc::clone(&shared_counter);
 
         // start this worker
         handles.push(
             //let injector = Arc::clone(&injector);
-            thread::spawn(move || run(i, &mut w, prev, next, local_stealers)),
+            //thread::spawn(move || run(i, shared_counter, &mut w, prev, next, local_stealers)),
+            thread::spawn(move || run(i, counter_clone, n_actors, heap_clone)),
         );
     }
 

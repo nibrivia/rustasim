@@ -22,9 +22,11 @@ type PHOLDEvent = ();
 pub type FullEvent = crate::engine::Event<Time, PHOLDEvent>;
 
 /// PHOLD actor
+#[derive(Debug)]
 struct Actor {
     pub id: usize,
     time_limit: Time,
+    //last_stall: Time,
     unif: Uniform<usize>,
 
     merger: Merger<Time, PHOLDEvent>,
@@ -75,6 +77,7 @@ impl Actor {
         Actor {
             id,
             time_limit,
+            //last_stall: 0,
             unif: Uniform::from(0..out_queues.len()),
 
             merger: Merger::new(in_queues, id, _ix_to_id),
@@ -87,14 +90,25 @@ impl Actor {
     }
 }
 
-impl Advancer for Actor {
-    fn advance(&mut self) -> ActorState {
+impl Advancer<Time> for Actor {
+    fn advance(&mut self) -> ActorState<Time> {
+        //println!("  {} started", self.id);
+
         while let Some(mut event) = self.merger.next() {
             //println!("{}: {:?}", self.id, event);
 
             if event.time > self.time_limit {
+                println!("{} done", self.id);
+                for chan in &self.out_queues {
+                    chan.push(Event {
+                        event_type: EventType::Close,
+                        src: self.id,
+                        time: event.time,
+                    })
+                    .unwrap();
+                }
                 break;
-            }0
+            }
 
             let mut rng = rand::thread_rng();
             let exp = Exp::new(1.0).unwrap();
@@ -102,11 +116,12 @@ impl Advancer for Actor {
                 EventType::Close => unreachable!(),
                 EventType::Null => unreachable!(),
                 EventType::Stalled => {
-                    for dst_ix in 0..self.out_times.len() {
-                        let out_time = self.out_times[dst_ix];
+                    let mut c = 0;
+
+                    for (dst_ix, out_time) in self.out_times.iter_mut().enumerate() {
                         // equal because they might just need a jog, blocking happens in the
                         // iterator, so no infinite loop risk
-                        if out_time < event.time {
+                        if *out_time < event.time {
                             //let cur_time = std::cmp::max(event.time, out_time);
                             self.out_queues[dst_ix]
                                 .push(Event {
@@ -115,13 +130,23 @@ impl Advancer for Actor {
                                     time: event.time + LOOKAHEAD,
                                 })
                                 .unwrap();
-                            //self.count += 1;
 
-                            self.out_times[dst_ix] = event.time;
+                            *out_time = event.time;
+                            c += 1;
                         }
                     }
 
-                    return ActorState::Continue;
+                    if false && c == 0 {
+                        println!(
+                            "  @{} {} {} Woke up with nothing to do...",
+                            event.time,
+                            event.time % 1000,
+                            self.id
+                        );
+                    }
+
+                    //println!("  {} done!", self.id);
+                    return ActorState::Continue(event.time);
                 }
                 EventType::ModelEvent(_) => {
                     self.count += 1;
@@ -205,7 +230,7 @@ pub fn run(n_actors: usize, mut time_limit: Time, n_threads: usize) {
         let outs = out_queues.pop().unwrap();
         let ins = in_queues.pop().unwrap();
         let a = Actor::new(id, outs, ins, time_limit); // TODO
-        actors.push(Box::new(a) as Box<dyn Advancer + Send>);
+        actors.push(Box::new(a) as Box<dyn Advancer<Time> + Send>);
     }
 
     // Workers

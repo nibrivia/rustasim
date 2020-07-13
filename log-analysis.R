@@ -18,14 +18,16 @@ dta %>%
     geom_col() +
     facet_wrap(~id)
 
-#start_t <- round(runif(n = 1, min = 0, max = max(dta$tx_time)))
-start_t <- 200
-#duration <- 250
-#end <- start_t + duration
-end <- 450
+start_t <- round(runif(n = 1, min = 0, max = max(dta$sim_time)))
+#start_t <- 20
+duration <- 250
+end <- start_t + duration
+#end <- 450
 
-start_sim <- 15
-end_sim <- 50
+#start_sim <- round(runif(n = 1, min = 0, max = max(dta$sim_time)))
+start_sim <- 000
+end_sim <- start_sim + 50
+#end_sim <- max(dta$sim_time)
 
 dta %>%
     filter(src != 0) %>%
@@ -39,8 +41,6 @@ dta %>%
                xend = rx_time,
                yend = sim_time,
                color = type)) +
-    geom_segment(arrow = arrow(length = unit(.05, "inches")),
-                 size = .5) +
     # geom_step(aes(x = tx_time,
     #               y = start,
     #               group = paste(src)),
@@ -49,10 +49,13 @@ dta %>%
                   y = sim_time,
                   group = id),
               color = "black") +
+    geom_segment(arrow = arrow(length = unit(.05, "inches")),
+                 size = .5) +
     #coord_cartesian(xlim = c(start_t, end)) +
     labs(x = "Real time (ms)",
          y = "Simulation time (us)") +
     #geom_point() +
+    facet_wrap(~id) +
     hrbrthemes::theme_ipsum_rc()
 
 dta %>%
