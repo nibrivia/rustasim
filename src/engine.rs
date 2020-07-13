@@ -17,6 +17,7 @@
 // TODO description of when the null-message should be sent and what it should look like
 
 use crossbeam_queue::spsc;
+use std::cmp::Ordering;
 use std::mem;
 
 // TODO update description to match the parametrized Events we have
@@ -65,9 +66,13 @@ pub struct Event<T, U>
 where
     T: Ord + Copy + num::Zero,
 {
+    /// Time at which this event is scheduled to happen
     pub time: T,
-    //pub real_time: u128,
+
+    /// Unique ID of the source of the event
     pub src: usize,
+
+    /// Event type, either built-in, or user-defined
     pub event_type: EventType<U>,
 }
 
@@ -321,16 +326,17 @@ where
                 let cur_loser = &mut self.loser_e[index];
 
                 // The current loser wins, swap with our candidate, move up
-                if cur_loser.time < new_winner_e.time {
-                    mem::swap(&mut new_winner_e, cur_loser);
-                } else if cur_loser.time == new_winner_e.time {
-                    // if there's a tie, the Stalled event looses
-                    if let EventType::Stalled = new_winner_e.event_type {
-                        //if let EventType::Stalled = self.loser_e[index].event_type {
-                        //} else {
-                        mem::swap(&mut new_winner_e, cur_loser);
-                        //}
+                match cur_loser.time.cmp(&new_winner_e.time) {
+                    Ordering::Less => mem::swap(&mut new_winner_e, cur_loser),
+                    Ordering::Equal => {
+                        if let EventType::Stalled = new_winner_e.event_type {
+                            //if let EventType::Stalled = self.loser_e[index].event_type {
+                            //} else {
+                            mem::swap(&mut new_winner_e, cur_loser);
+                            //}
+                        }
                     }
+                    _ => {}
                 }
 
                 index /= 2;

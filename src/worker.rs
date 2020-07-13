@@ -23,19 +23,23 @@ use std::collections::BinaryHeap;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 
+/// Return value for actors to use to signal their state to the workers
 #[derive(Debug)]
 pub enum ActorState<T, R>
 where
     T: Ord + Copy + num::Zero,
 {
+    /// The simulation was able to advance up to this time
     Continue(T),
+
+    /// The simulation is done, returning inner type R
     Done(R),
 }
 
 /// Advancer trait to be implemented by the simulation actors
 ///
 /// The advancer trait allows the workers to pick up the actors and keep them going
-pub trait Advancer<T, R>
+pub trait Advancer<T, R>: Debug
 where
     T: Ord + Copy + num::Zero,
 {

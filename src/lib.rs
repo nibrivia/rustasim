@@ -1,3 +1,6 @@
+#![deny(missing_debug_implementations)]
+#![deny(missing_docs)]
+
 //! Parallel datacenter network simulator
 //!
 //! Throughout this crate there is a user-backend relationship between the [simulation
@@ -17,11 +20,12 @@ use std::thread;
 //use slog_async;
 
 pub mod engine;
-pub mod logger;
 pub mod network;
 pub mod phold;
 pub mod worker;
 
+/// Maintains the state of the actor while it's at rest
+#[derive(Debug)]
 pub struct FrozenActor<T, R>
 where
     T: Ord + Copy + num::Zero,

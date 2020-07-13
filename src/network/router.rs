@@ -1,4 +1,4 @@
-//! Deals with most of the IP-layerish things: routing, matching packets to flows...
+//! Router module, takes care of ToRs and backbone switches
 
 use crossbeam_queue::spsc;
 use crossbeam_queue::spsc::*;
@@ -13,7 +13,9 @@ use crate::worker::{ActorState, Advancer};
 ///
 /// Connects down to a certain number of servers and out to backbone switches. It is important that
 /// the up- and down- bandwidth be matched lest there be excessive queues.
+#[derive(Debug)]
 pub struct RouterBuilder {
+    /// ID of the Router to be built
     pub id: usize,
 
     // fundamental properties
@@ -82,6 +84,7 @@ impl Connectable for &mut RouterBuilder {
 // TODO extract a build
 impl RouterBuilder {
     // TODO document
+    /// Creates a new RouterBuilder with sensible defaults
     pub fn new(id: usize) -> RouterBuilder {
         RouterBuilder {
             id,
@@ -100,7 +103,7 @@ impl RouterBuilder {
     }
 
     // needs to be called last
-    // TODO document
+    /// Creates a connection the World, see documentation for World
     pub fn connect_world(&mut self) -> Producer<ModelEvent> {
         self.id_to_ix.insert(0, self.next_ix);
 
@@ -134,6 +137,7 @@ impl RouterBuilder {
         }
     }
 
+    /// Builds the server described by this builder
     pub fn build(self) -> Router {
         // build the event merger
         let mut v = Vec::new();
@@ -186,7 +190,9 @@ impl RouterBuilder {
 /// For performance reasons, it is beneficial to not use hash tables in critical-path data
 /// structures. This means that each `Router` has a mapping of other Router IDs to an index. `Event`s
 /// coming out of the `Merger` already have their `src` field converted to the right index for us.
+#[derive(Debug)]
 pub struct Router {
+    /// Unique ID of the router
     pub id: usize,
 
     // fundamental properties
@@ -205,10 +211,11 @@ pub struct Router {
     route: Vec<usize>,
 
     // stats
-    pub count: u64,
+    count: u64,
 }
 
 impl Router {
+    /// Starts the router, will not return until finished
     pub fn start(&mut self) -> u64 {
         println!("Router {} start", self.id);
         while let ActorState::Continue(_) = self.advance() {}
@@ -303,13 +310,14 @@ impl Advancer<u64, u64> for Router {
                             let next_hop_ix = self.route[packet.dst];
 
                             // drop packet if our outgoing queue is full
-                            if false
-                                && event.time
-                                    > self.out_times[next_hop_ix] + 10 * 1500 * self.ns_per_byte
+                            /*
+                            if event.time
+                                > self.out_times[next_hop_ix] + 10 * 1500 * self.ns_per_byte
                             {
                                 println!("Router {} drop {:?}", self.id, packet);
                                 continue;
                             }
+                            */
 
                             // when
                             let cur_time = std::cmp::max(event.time, self.out_times[next_hop_ix]);

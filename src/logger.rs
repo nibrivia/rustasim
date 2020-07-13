@@ -6,6 +6,7 @@ use std::io;
 use std::time::Instant;
 
 /// Attempt to write a *very* simple logger
+#[derive(Debug)]
 pub struct MsgLogger<W: io::Write> {
     io: RefCell<W>,
     pub start: Instant,

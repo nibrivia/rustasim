@@ -19,7 +19,7 @@ const LOOKAHEAD: Time = 1 as Time * T_MULT;
 /// Generic event
 type PHOLDEvent = ();
 
-pub type FullEvent = crate::engine::Event<Time, PHOLDEvent>;
+type FullEvent = crate::engine::Event<Time, PHOLDEvent>;
 
 /// PHOLD actor
 #[derive(Debug)]
@@ -46,7 +46,7 @@ impl Actor {
     ) -> Actor {
         let mut _ix_to_id = Vec::new();
         let mut out_times = Vec::new();
-        for ix in 0..out_queues.len() {
+        for (ix, q) in out_queues.iter().enumerate() {
             _ix_to_id.push(ix);
             out_times.push(0);
 
@@ -54,23 +54,21 @@ impl Actor {
                 // send ourselves an initial event
                 //for _ in 0..out_queues.len() {
                 for _ in 0..100 {
-                    out_queues[ix]
-                        .push(Event {
-                            event_type: EventType::ModelEvent(()),
-                            src: id,
-                            time: LOOKAHEAD,
-                        })
-                        .unwrap();
-                }
-            } else {
-                // initialize everyone else
-                out_queues[ix]
-                    .push(Event {
-                        event_type: EventType::Null,
+                    q.push(Event {
+                        event_type: EventType::ModelEvent(()),
                         src: id,
                         time: LOOKAHEAD,
                     })
                     .unwrap();
+                }
+            } else {
+                // initialize everyone else
+                q.push(Event {
+                    event_type: EventType::Null,
+                    src: id,
+                    time: LOOKAHEAD,
+                })
+                .unwrap();
             }
         }
 
@@ -116,8 +114,6 @@ impl Advancer<Time, Res> for Actor {
                 EventType::Close => unreachable!(),
                 EventType::Null => unreachable!(),
                 EventType::Stalled => {
-                    let mut c = 0;
-
                     for (dst_ix, out_time) in self.out_times.iter_mut().enumerate() {
                         // equal because they might just need a jog, blocking happens in the
                         // iterator, so no infinite loop risk
@@ -132,20 +128,9 @@ impl Advancer<Time, Res> for Actor {
                                 .unwrap();
 
                             *out_time = event.time;
-                            c += 1;
                         }
                     }
 
-                    if false && c == 0 {
-                        println!(
-                            "  @{} {} {} Woke up with nothing to do...",
-                            event.time,
-                            event.time % 1000,
-                            self.id
-                        );
-                    }
-
-                    //println!("  {} done!", self.id);
                     return ActorState::Continue(event.time);
                 }
                 EventType::ModelEvent(_) => {
@@ -198,6 +183,7 @@ pub fn transpose<T>(in_vector: Vec<Vec<T>>) -> Vec<Vec<T>> {
     result
 }
 
+/// Builds and runs a PHOLD model as described by the passed arguments
 pub fn run(n_actors: usize, mut time_limit: Time, n_threads: usize) {
     time_limit *= T_MULT;
     println!("Setup...");

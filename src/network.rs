@@ -11,10 +11,10 @@ use crossbeam_queue::spsc::Producer;
 use std::collections::HashMap;
 use std::time::Instant;
 
-pub mod router;
-pub mod routing;
-pub mod server;
-pub mod tcp;
+mod router;
+mod routing;
+mod server;
+mod tcp;
 
 const Q_SIZE: usize = 1 << 10;
 
@@ -42,23 +42,32 @@ impl std::fmt::Debug for NetworkEvent {
     }
 }
 
-pub type ModelEvent = crate::engine::Event<u64, NetworkEvent>;
+type ModelEvent = crate::engine::Event<u64, NetworkEvent>;
 
 /// Device types
 #[derive(Debug)]
 pub enum Device {
+    /// Router device type
     Router,
+
+    /// Server device type
     Server,
 }
 
-/// A standard interface for connecting devices of all types
 // TODO change this API, connect(a, b) function, connectable just has functions for giving and
 // getting queues.
+/// A standard interface for connecting devices of all types
 pub trait Connectable {
+    /// The unique ID of this connectable
     fn id(&self) -> usize;
+
+    /// Whether it is a Router or a Server
     fn flavor(&self) -> Device;
 
+    /// Connect these two routers together, public facing
     fn connect(&mut self, other: impl Connectable);
+
+    /// Called by connect to establish the connection the other way
     fn back_connect(
         &mut self,
         other: impl Connectable,
@@ -66,6 +75,9 @@ pub trait Connectable {
     ) -> Producer<ModelEvent>;
 }
 
+/// Builds and runs a network with the given parameters
+///
+/// TODO more...
 pub fn build_network(n_racks: usize, time_limit: u64, n_cpus: usize) {
     // TODO pass in time_limit, n_threads as arguments
 
@@ -127,7 +139,8 @@ pub fn build_network(n_racks: usize, time_limit: u64, n_cpus: usize) {
     println!("done");
 }
 
-pub struct World {
+#[derive(Debug)]
+struct World {
     /// The actors themselves
     racks: Vec<Router>,
     servers: Vec<Server>,
@@ -224,21 +237,17 @@ impl World {
 
         // Flows -----------------------------------------------
         let mut flow_id = 0;
-        for src_ix in 0..servers.len() {
-            let src_id = servers[src_ix].id;
-
-            for dst_ix in 0..servers.len() {
+        for src in servers.iter() {
+            for dst in servers.iter() {
                 // skip self flows...
-                if src_ix == dst_ix {
+                if src.id == dst.id {
                     continue;
                 }
 
-                let dst_id = servers[dst_ix].id;
-
-                let f = Flow::new(flow_id, src_id, dst_id, 100000000);
+                let f = Flow::new(flow_id, src.id, dst.id, 100000000);
                 flow_id += 1;
 
-                chans[&src_id]
+                chans[&src.id]
                     .push(Event {
                         src: 0,
                         time: 0,

@@ -1,3 +1,5 @@
+//! Server module
+
 use crossbeam_queue::spsc;
 use crossbeam_queue::spsc::*;
 use std::collections::HashMap;
@@ -7,7 +9,13 @@ use crate::network::tcp;
 use crate::network::{Connectable, Device, ModelEvent, NetworkEvent, Q_SIZE};
 use crate::worker::{ActorState, Advancer};
 
+/// A ServerBuilder is used to create a Server
+///
+/// Notably, once a server is created, it cannot be modified, the builder however can be changed,
+/// connected to other builders and so on.
+#[derive(Debug)]
 pub struct ServerBuilder {
+    /// Future ID of the server
     pub id: usize,
 
     ns_per_byte: u64,
@@ -63,7 +71,7 @@ impl Connectable for &mut ServerBuilder {
 }
 
 impl ServerBuilder {
-    // TODO document
+    /// Starts the process for building a server
     pub fn new(id: usize) -> ServerBuilder {
         let mut id_to_ix = HashMap::new();
         let mut ix_to_id = Vec::new();
@@ -98,7 +106,7 @@ impl ServerBuilder {
         }
     }
 
-    // TODO document
+    /// Establishes a connection to the "World", see documentation for World
     pub fn connect_world(&mut self) -> Producer<ModelEvent> {
         // world queue
         // TODO create a WORLD_ID thing
@@ -111,6 +119,7 @@ impl ServerBuilder {
         world_prod
     }
 
+    /// Returns the Server with the specified parameters
     pub fn build(self) -> Server {
         let mut v = Vec::new();
         for id in &self.ix_to_id {
@@ -162,7 +171,9 @@ impl ServerBuilder {
 /// The server has 3 neighbours: the top-of-rack switch, the outside world, and itself (for
 /// timeouts). Timeouts are particularly tricky in that they might not be monotonically
 /// scheduled... TBD
+#[derive(Debug)]
 pub struct Server {
+    /// Unique ID for the server
     pub id: usize,
 
     ns_per_byte: u64,
@@ -177,7 +188,7 @@ pub struct Server {
 
     flows: HashMap<usize, tcp::Flow>,
 
-    pub count: u64,
+    count: u64,
 }
 
 impl Server {
