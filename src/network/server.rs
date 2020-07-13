@@ -190,7 +190,7 @@ impl Server {
         while let ActorState::Continue(_) = self.advance() {}
 
         println!(" Server {} done", self.id);
-        return self.count;
+        self.count
     }
 }
 

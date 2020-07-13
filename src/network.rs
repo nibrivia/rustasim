@@ -225,7 +225,7 @@ impl World {
         // Flows -----------------------------------------------
         let mut flow_id = 0;
         for src_ix in 0..servers.len() {
-            let src_id = (&mut servers[src_ix]).id;
+            let src_id = servers[src_ix].id;
 
             for dst_ix in 0..servers.len() {
                 // skip self flows...
@@ -233,7 +233,7 @@ impl World {
                     continue;
                 }
 
-                let dst_id = (&mut servers[dst_ix]).id;
+                let dst_id = servers[dst_ix].id;
 
                 let f = Flow::new(flow_id, src_id, dst_id, 100000000);
                 flow_id += 1;

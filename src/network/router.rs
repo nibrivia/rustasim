@@ -214,7 +214,7 @@ impl Router {
         while let ActorState::Continue(_) = self.advance() {}
 
         println!("Router {} done", self.id);
-        return self.count;
+        self.count
     }
 }
 

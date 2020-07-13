@@ -1,4 +1,3 @@
-use slog;
 use slog::OwnedKVList;
 use slog::Record;
 
@@ -34,9 +33,9 @@ where
     fn log(&self, rinfo: &Record, _logger_values: &OwnedKVList) -> io::Result<()> {
         let mut io = self.io.borrow_mut();
         if rinfo.level() == slog::Level::Trace {
-            write!(io, "{},{}\n", self.start.elapsed().as_nanos(), rinfo.msg())?;
+            writeln!(io, "{},{}", self.start.elapsed().as_nanos(), rinfo.msg())?;
         } else {
-            write!(io, "{}\n", rinfo.msg())?;
+            writeln!(io, "{}", rinfo.msg())?;
         }
 
         Ok(())

@@ -2,7 +2,6 @@
 
 use crossbeam_queue::spsc;
 use crossbeam_queue::spsc::{Consumer, Producer};
-use rand;
 use rand::distributions::{Distribution, Uniform};
 use rand_distr::Exp;
 use std::time::Instant;

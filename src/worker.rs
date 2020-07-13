@@ -77,13 +77,11 @@ pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
                 }
             }
         //println!("{} task done", id);
+        } else if counter.get() == n_tasks {
+            println!("{} finished", id);
+            return counts;
         } else {
-            if counter.get() == n_tasks {
-                println!("{} finished", id);
-                return counts;
-            } else {
-                task = task_heap.lock().unwrap().pop();
-            }
+            task = task_heap.lock().unwrap().pop();
         }
     }
 }
