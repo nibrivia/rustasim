@@ -1,5 +1,6 @@
 [package]
 name = "rustasim"
+description = "Distributed event-driven simulator with a focus on datacenter networks"
 version = "0.0.99"
 authors = ["Olivia Brode-Roger <nibr@mit.edu>"]
 edition = "2018"
