@@ -359,7 +359,7 @@ where
 
             // If we were gonna stall but we can make progress, don't
             if let EventType::Stalled = new_winner_e.event_type {
-                if self.in_queues[new_winner_e.src].len() > 0 {
+                if !self.in_queues[new_winner_e.src].is_empty() {
                     continue;
                 }
             }

@@ -4,7 +4,7 @@ use rustasim::phold;
 
 fn main() {
     let n_cpus = num_cpus::get() - 1;
-    phold::run(7 * 8, 1_000_000, n_cpus);
+    phold::run(7 * 8 * 4, 0_100_000, n_cpus);
 
     //                      s  ms  us  ns
     //let time_limit: u64 = 001_000_000_000;

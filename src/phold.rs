@@ -54,7 +54,7 @@ impl Actor {
             if ix == id {
                 // send ourselves an initial event
                 //for _ in 0..out_queues.len() {
-                for _ in 0..out_queues.len() {
+                for _ in 0..100 {
                     out_queues[ix]
                         .push(Event {
                             event_type: EventType::ModelEvent(()),
