@@ -71,27 +71,6 @@ where
     pub event_type: EventType<U>,
 }
 
-/*
-impl<T, U> Ord for Event<T, U> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        other.time.cmp(&self.time)
-    }
-}
-
-impl<T, U> PartialOrd for Event<T, U> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<T, U> PartialEq for Event<T, U> {
-    fn eq(&self, other: &Self) -> bool {
-        self.time == other.time
-    }
-}
-impl<T, U> Eq for Event<T, U> {}
-*/
-
 /// Manages the input queues and returns the next [`Event`](struct.Event.html) to be processed.
 ///
 /// The events returned by `Merger` are monotonically increasing and come from either neighbours,
