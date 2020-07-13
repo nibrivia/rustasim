@@ -272,7 +272,7 @@ impl World {
         }
 
         // Workers
-        let mut actors: Vec<Box<dyn Advancer<u64> + Send>> = Vec::new();
+        let mut actors: Vec<Box<dyn Advancer<u64, u64> + Send>> = Vec::new();
         for s in self.servers {
             actors.push(Box::new(s));
         }

@@ -218,13 +218,13 @@ impl Router {
     }
 }
 
-impl Advancer<u64> for Router {
+impl Advancer<u64, u64> for Router {
     /// Starts the rack, consumes the object
     ///
     /// The return value is a counter of some sort. It is mostly used for fast stats on the run.
     /// This will almost certainly change to a function with no return value in the near future.
     //pub fn start(&mut self, log: slog::Logger, start: Instant) -> u64 {
-    fn advance(&mut self) -> ActorState<u64> {
+    fn advance(&mut self) -> ActorState<u64, u64> {
         //println!("Router {} advancing", self.id);
         //let log = log.new(o!("Router" => self.id));
         //info!(log, "start...");

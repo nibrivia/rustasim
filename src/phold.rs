@@ -11,6 +11,7 @@ use crate::engine::*;
 use crate::worker::{ActorState, Advancer};
 
 type Time = u64;
+type Res = u64;
 
 const Q_SIZE: usize = 128;
 const T_MULT: Time = 1024 as Time;
@@ -90,8 +91,8 @@ impl Actor {
     }
 }
 
-impl Advancer<Time> for Actor {
-    fn advance(&mut self) -> ActorState<Time> {
+impl Advancer<Time, Res> for Actor {
+    fn advance(&mut self) -> ActorState<Time, Res> {
         //println!("  {} started", self.id);
 
         while let Some(mut event) = self.merger.next() {
@@ -230,7 +231,7 @@ pub fn run(n_actors: usize, mut time_limit: Time, n_threads: usize) {
         let outs = out_queues.pop().unwrap();
         let ins = in_queues.pop().unwrap();
         let a = Actor::new(id, outs, ins, time_limit); // TODO
-        actors.push(Box::new(a) as Box<dyn Advancer<Time> + Send>);
+        actors.push(Box::new(a) as Box<dyn Advancer<Time, Res> + Send>);
     }
 
     // Workers

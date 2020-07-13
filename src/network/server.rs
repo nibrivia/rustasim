@@ -194,9 +194,9 @@ impl Server {
     }
 }
 
-impl Advancer<u64> for Server {
+impl Advancer<u64, u64> for Server {
     //pub fn advance(&mut self, log: slog::Logger, start: Instant) -> bool {
-    fn advance(&mut self) -> ActorState<u64> {
+    fn advance(&mut self) -> ActorState<u64, u64> {
         //info!(log, "start...");
         //println!(" Server {} advance", self.id);
 

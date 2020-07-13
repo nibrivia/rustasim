@@ -22,15 +22,15 @@ pub mod network;
 pub mod phold;
 pub mod worker;
 
-pub struct FrozenActor<T>
+pub struct FrozenActor<T, R>
 where
     T: Ord + Copy + num::Zero,
 {
     time: T,
-    actor: Box<dyn Advancer<T> + Send>,
+    actor: Box<dyn Advancer<T, R> + Send>,
 }
 
-impl<T> Ord for FrozenActor<T>
+impl<T, R> Ord for FrozenActor<T, R>
 where
     T: Ord + Copy + num::Zero,
 {
@@ -39,7 +39,7 @@ where
     }
 }
 
-impl<T> PartialOrd for FrozenActor<T>
+impl<T, R> PartialOrd for FrozenActor<T, R>
 where
     T: Ord + Copy + num::Zero,
 {
@@ -48,7 +48,7 @@ where
     }
 }
 
-impl<T> PartialEq for FrozenActor<T>
+impl<T, R> PartialEq for FrozenActor<T, R>
 where
     T: Ord + Copy + num::Zero,
 {
@@ -56,17 +56,17 @@ where
         self.time == other.time
     }
 }
-impl<T> Eq for FrozenActor<T> where T: Ord + Copy + num::Zero {}
+impl<T, R> Eq for FrozenActor<T, R> where T: Ord + Copy + num::Zero {}
 
 /// Starts the actors on `num_cpus` workers
 ///
 /// This function takes care of all the necessary building of the workers and connecting to launch
 /// them
 // TODO check if we can remove dynamic dispatch in simple cases
-pub fn start<T: 'static + Ord + Copy + Debug + Send + num::Zero>(
+pub fn start<T: 'static + Ord + Copy + Debug + Send + num::Zero, R: 'static + Send + Copy>(
     num_cpus: usize,
-    actors: Vec<Box<dyn Advancer<T> + Send>>,
-) -> Vec<u64> {
+    actors: Vec<Box<dyn Advancer<T, R> + Send>>,
+) -> Vec<R> {
     // Start the workers
     let mut handles = Vec::new();
     let n_actors = actors.len();
@@ -92,7 +92,7 @@ pub fn start<T: 'static + Ord + Copy + Debug + Send + num::Zero>(
     // Wait for the workers to be done
     let mut counts = Vec::new();
     for h in handles {
-        let local_counts: Vec<u64> = h.join().unwrap();
+        let local_counts: Vec<R> = h.join().unwrap();
         counts.extend(local_counts);
     }
 

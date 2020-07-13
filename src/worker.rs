@@ -24,18 +24,18 @@ use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
-pub enum ActorState<T>
+pub enum ActorState<T, R>
 where
     T: Ord + Copy + num::Zero,
 {
     Continue(T),
-    Done(u64),
+    Done(R),
 }
 
 /// Advancer trait to be implemented by the simulation actors
 ///
 /// The advancer trait allows the workers to pick up the actors and keep them going
-pub trait Advancer<T>
+pub trait Advancer<T, R>
 where
     T: Ord + Copy + num::Zero,
 {
@@ -43,18 +43,18 @@ where
     ///
     /// The return value indicates whether it should get rescheduled or no. `true` reschedules,
     /// `false` assumes it is done.
-    fn advance(&mut self) -> ActorState<T>;
+    fn advance(&mut self) -> ActorState<T, R>;
 }
 
 /// Runs until no more progress can be made at all...
 ///
 /// TODO: pulled from crossbeam's documentation, figure more about how it works
-pub fn run<T: Ord + Copy + Debug + num::Zero>(
+pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
     id: usize,
     counter: Arc<RelaxedCounter>,
     n_tasks: usize,
-    task_heap: Arc<Mutex<BinaryHeap<FrozenActor<T>>>>,
-) -> Vec<u64> {
+    task_heap: Arc<Mutex<BinaryHeap<FrozenActor<T, R>>>>,
+) -> Vec<R> {
     println!("{} start", id);
     let mut counts = Vec::new();
 
