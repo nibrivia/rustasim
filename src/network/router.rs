@@ -257,11 +257,10 @@ impl Advancer<u64> for Router {
                 // We're waiting on a neighbour...
                 EventType::Stalled => {
                     // We need the time from these friendos
-                    for dst_ix in 0..self.out_times.len() {
-                        let out_time = self.out_times[dst_ix];
+                    for (dst_ix, out_time) in self.out_times.iter_mut().enumerate() {
                         // equal because they might just need a jog, blocking happens in the
                         // iterator, so no infinite loop risk
-                        if out_time < event.time {
+                        if *out_time < event.time {
                             //let cur_time = std::cmp::max(event.time, out_time);
                             self.out_queues[dst_ix]
                                 .push(Event {
@@ -272,7 +271,7 @@ impl Advancer<u64> for Router {
                                 .unwrap();
                             //self.count += 1;
 
-                            self.out_times[dst_ix] = event.time;
+                            *out_time = event.time;
                         }
                         /*println!(
                             "Router {} @{}: Null({}) >{}",
@@ -304,8 +303,9 @@ impl Advancer<u64> for Router {
                             let next_hop_ix = self.route[packet.dst];
 
                             // drop packet if our outgoing queue is full
-                            if event.time
-                                > self.out_times[next_hop_ix] + 10 * 1500 * self.ns_per_byte
+                            if false
+                                && event.time
+                                    > self.out_times[next_hop_ix] + 10 * 1500 * self.ns_per_byte
                             {
                                 println!("Router {} drop {:?}", self.id, packet);
                                 continue;

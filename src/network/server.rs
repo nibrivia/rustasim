@@ -213,8 +213,8 @@ impl Advancer<u64> for Server {
             match event.event_type {
                 EventType::Close => {
                     // ensure everyone ignores us from now until close
-                    for dst_ix in 0..self.out_queues.len() {
-                        self.out_queues[dst_ix]
+                    for out_q in self.out_queues.iter() {
+                        out_q
                             .push(Event {
                                 event_type: EventType::Close,
                                 //real_time: start.elapsed().as_nanos(),

@@ -54,87 +54,26 @@ pub fn run<T: Ord + Copy + Debug + num::Zero>(
     counter: Arc<RelaxedCounter>,
     n_tasks: usize,
     task_heap: Arc<Mutex<BinaryHeap<FrozenActor<T>>>>,
-    //local: &Worker<Box<dyn Advancer + Send>>,
-    //prev: Consumer<Box<dyn Advancer + Send>>,
-    //next: Producer<Box<dyn Advancer + Send>>,
-    //global: Arc<Injector<Box<dyn Advancer + Send>>>,
-    //stealers: Vec<Stealer<Box<dyn Advancer + Send>>>,
 ) -> Vec<u64> {
     println!("{} start", id);
     let mut counts = Vec::new();
+
+    // initial task
+    let mut task = task_heap.lock().unwrap().pop();
     loop {
-        let task = task_heap.lock().unwrap().pop();
-
-        /*
-        while let Ok(task) = prev.pop() {
-            local.push(task);
-        }
-
-        let mut task: Option<Box<dyn Advancer + Send>> = local.pop();
-        if let Some(_) = task {
-            //println!("{} got local", id);
-        }
-
-        // Try first to steal from our neighbours, in reverse order
-        let backoff = Backoff::new();
-        while let None = task {
-            while let Ok(task) = prev.pop() {
-                local.push(task);
-            }
-
-            task = local.pop();
-            if let Some(_) = task {
-                //println!("{} got local", id);
-                break;
-            }
-
-            for s in &stealers {
-                let mut r = s.steal();
-                while r.is_retry() {
-                    //println!("{} retry", id);
-                    r = s.steal();
-                }
-
-                match r {
-                    Steal::Empty => continue,
-                    Steal::Success(t) => {
-                        task = Some(t);
-                        //println!("{} got stolen", id);
-                        break;
-                    }
-                    Steal::Retry => unreachable!(),
-                }
-            }
-
-            backoff.snooze();
-        }
-        */
-
-        /*local.pop().or_else(|| {
-            // Otherwise, we need to look for a task elsewhere.
-            std::iter::repeat_with(|| {
-                // Try stealing a batch of tasks from the global queue.
-                global
-                    .steal_batch_and_pop(local)
-                    // Or try stealing a task from one of the other threads.
-                    .or_else(|| stealers.iter().map(|s| s.steal()).collect())
-            })
-            // Loop while no task was stolen and any steal operation needs to be retried.
-            .find(|s| !s.is_retry())
-            // Extract the stolen task, if there is one.
-            .and_then(|s| s.success())
-        });*/
-
         if let Some(mut frozen_actor) = task {
             //println!("{} task start", id);
             match frozen_actor.actor.advance() {
                 ActorState::Continue(time) => {
                     frozen_actor.time = time;
-                    task_heap.lock().unwrap().push(frozen_actor);
+                    let mut heap = task_heap.lock().unwrap();
+                    heap.push(frozen_actor);
+                    task = heap.pop();
                 }
                 ActorState::Done(count) => {
                     counts.push(count);
                     counter.inc();
+                    task = task_heap.lock().unwrap().pop();
                 }
             }
         //println!("{} task done", id);
@@ -143,7 +82,7 @@ pub fn run<T: Ord + Copy + Debug + num::Zero>(
                 println!("{} finished", id);
                 return counts;
             } else {
-                println!("{} {}/{} done", id, counter.get(), n_tasks);
+                task = task_heap.lock().unwrap().pop();
             }
         }
     }

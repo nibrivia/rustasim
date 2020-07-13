@@ -317,15 +317,8 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         // The state of this must be mostly done except for the previous winner
         loop {
-            // get the path up
-            let mut index = self.paths[self.winner_q];
-            let q = &self.in_queues[self.winner_q]; // avoids regularly indexing into that vec
-
-            // TODO handle safe_time
-            // TODO handle when more than one path is empty?
-
             // get the new candidate
-            let mut new_winner_e = match q.pop() {
+            let mut new_winner_e = match self.in_queues[self.winner_q].pop() {
                 Err(_) => {
                     Event {
                         time: self.safe_time,
@@ -340,20 +333,23 @@ where
             // change the source id->ix now
             new_winner_e.src = self.winner_q;
 
+            // get the path up
+            let mut index = self.paths[self.winner_q];
+
             // go up our path, noting the loser as we go
             while index != 0 {
                 // get current loser
-                let cur_loser_t = self.loser_e[index].time;
+                let cur_loser = &mut self.loser_e[index];
 
                 // The current loser wins, swap with our candidate, move up
-                if cur_loser_t < new_winner_e.time {
-                    mem::swap(&mut new_winner_e, &mut self.loser_e[index]);
-                } else if cur_loser_t == new_winner_e.time {
+                if cur_loser.time < new_winner_e.time {
+                    mem::swap(&mut new_winner_e, cur_loser);
+                } else if cur_loser.time == new_winner_e.time {
                     // if there's a tie, the Stalled event looses
                     if let EventType::Stalled = new_winner_e.event_type {
                         //if let EventType::Stalled = self.loser_e[index].event_type {
                         //} else {
-                        mem::swap(&mut new_winner_e, &mut self.loser_e[index]);
+                        mem::swap(&mut new_winner_e, cur_loser);
                         //}
                     }
                 }
