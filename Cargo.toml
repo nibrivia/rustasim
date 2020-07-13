@@ -1,6 +1,6 @@
 [package]
 name = "rustasim"
-version = "0.1.0"
+version = "0.0.99"
 authors = ["Olivia Brode-Roger <nibr@mit.edu>"]
 edition = "2018"
 readme = "README.md"

@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 mod router;
-mod routing;
+pub mod routing;
 mod server;
 mod tcp;
 

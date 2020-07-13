@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+/// Convenient wrapper for the network description
 pub type Network = HashMap<usize, Vec<usize>>;
 
 /// Given `network` a map of nodes and their neighbours, find the routing table for the given `id`
@@ -16,7 +17,6 @@ pub type Network = HashMap<usize, Vec<usize>>;
 ///
 /// # Examples
 /// ```
-/// /*
 /// use std::collections::HashMap;
 /// use rustasim::network::routing::route_id;
 ///
@@ -42,7 +42,6 @@ pub type Network = HashMap<usize, Vec<usize>>;
 /// // assert_eq!(route[&2], 0);
 /// assert_eq!(route[&3], 3);
 /// assert_eq!(route[&4], 3);
-/// */
 /// ```
 pub fn route_id(network: &Network, source_id: usize) -> HashMap<usize, usize> {
     // temporary map from id -> (next_hop, cost)
