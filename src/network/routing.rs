@@ -131,7 +131,7 @@ pub fn build_fc(n_racks: usize, hosts_per_rack: usize) -> (Network, usize) {
 ///
 /// The switches in this topology have `k = u+d` ports. `u` represents the number of uplinks from a
 /// ToR, `d` the number of downlinks.  Within the tree, the switches are balanced, with `k/2` up-
-/// and down- links.
+/// and down- links. **`k` has to be even.**
 ///
 /// `build_clos(3, 9)` creates a 3:1 oversubscribed CLOS topology with `k=12` with 648 hosts.
 ///
