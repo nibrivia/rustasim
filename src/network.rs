@@ -93,8 +93,8 @@ pub fn build_network(n_racks: usize, time_limit: u64, n_cpus: usize) {
     let counts = world.start(n_cpus, time_limit);
     let duration = start.elapsed();
 
-    let n_thread = counts.len();
-    let n_cpus = std::cmp::min(n_cpus, n_thread);
+    let n_actors = counts.len();
+    let n_cpus = std::cmp::min(n_cpus, n_actors);
 
     // TODO make general
     // each ToR sends to n_racks-1 racks and n_racks-1 servers
@@ -114,28 +114,29 @@ pub fn build_network(n_racks: usize, time_limit: u64, n_cpus: usize) {
     let gbps = (n_links * 8 * time_limit) as f64 / 1e9 / duration.as_secs_f64();
 
     println!(
-        "= {} in {:.3}s. {} actors, {} cores",
+        "= {} in {:.3}s. {} actors, {} hosts, {} cores",
         sum_count,
         duration.as_secs_f32(),
-        n_thread,
+        n_actors,
+        n_hosts,
         n_cpus,
     );
     println!(
         "  {:.3}M count/sec, {:.3}M /actors, {:.3}M /cpu",
         (1e6 / ns_per_count as f64),
-        (1e6 / (ns_per_count * n_thread as f64)),
+        (1e6 / (ns_per_count * n_actors as f64)),
         (1e6 / (ns_per_count * n_cpus as f64)),
     );
     println!(
         "  {:.1} ns/count, {:.1} ns/actor, {:.1} ns/cpu",
         ns_per_count / 1000. as f64,
-        ns_per_count * n_thread as f64 / 1000.,
+        ns_per_count * n_actors as f64 / 1000.,
         ns_per_count * n_cpus as f64 / 1000.
     );
     println!(
         "  {:.3} gbps, {:.3} gbps/actor ({} links total)",
         gbps,
-        (gbps / n_thread as f64),
+        (gbps / n_actors as f64),
         n_links
     );
 
