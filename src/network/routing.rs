@@ -96,7 +96,7 @@ pub fn connect(net: &mut Network, src: usize, dst: usize) {
 ///
 /// The hosts (servers) are reliably the lowest ids.  For the 648 host example this means the
 /// servers have IDs 0 through 647. The number of hosts is `n_racks*servers_per_rack`.
-pub fn build_fc(n_racks: usize, hosts_per_rack: usize) -> Network {
+pub fn build_fc(n_racks: usize, hosts_per_rack: usize) -> (Network, usize) {
     let mut net = Network::new();
 
     let n_hosts = n_racks * hosts_per_rack;
@@ -124,7 +124,7 @@ pub fn build_fc(n_racks: usize, hosts_per_rack: usize) -> Network {
         }
     }
 
-    net
+    (net, n_hosts)
 }
 
 /// Builds a folded CLOS network with `u` uplinks and `d` downlinks
@@ -142,7 +142,7 @@ pub fn build_fc(n_racks: usize, hosts_per_rack: usize) -> Network {
 /// This function's primary goal is to produce the same results as the [Opera implementation].
 ///
 /// [Opera implementation]: https://github.com/TritonNetworking/opera-sim/blob/master/src/clos/datacenter/fat_tree_topology_3to1_k12.cpp
-pub fn build_clos(u: usize, d: usize) -> Network {
+pub fn build_clos(u: usize, d: usize) -> (Network, usize) {
     let mut net = Network::new();
 
     let k = u + d;
@@ -195,7 +195,7 @@ pub fn build_clos(u: usize, d: usize) -> Network {
         }
     }
 
-    net
+    (net, n_hosts)
 }
 
 #[cfg(test)]
@@ -257,8 +257,8 @@ mod test {
 
     #[test]
     fn clos_k12_u3d9() {
-        let net = build_clos(3, 9);
-        let n_hosts = 648;
+        let (net, n_hosts) = build_clos(3, 9);
+        assert_eq!(n_hosts, 648);
         basic_net_checks(&net);
 
         for (&node, neighbs) in &net {
@@ -285,8 +285,8 @@ mod test {
 
     #[test]
     fn clos_k8_u2d6() {
-        let net = build_clos(2, 6);
-        let n_hosts = 192;
+        let (net, n_hosts) = build_clos(2, 6);
+        assert_eq!(n_hosts, 192);
         basic_net_checks(&net);
 
         for (&node, neighbs) in &net {
@@ -313,8 +313,8 @@ mod test {
 
     #[test]
     fn clos_k12_u6d18() {
-        let net = build_clos(6, 18);
-        let n_hosts = 5_184;
+        let (net, n_hosts) = build_clos(6, 18);
+        assert_eq!(n_hosts, 5_184);
         basic_net_checks(&net);
 
         for (&node, neighbs) in &net {
@@ -341,8 +341,8 @@ mod test {
 
     #[test]
     fn fc_4racks_3hosts() {
-        let net = build_fc(4, 3);
-        let n_hosts = 4 * 3;
+        let (net, n_hosts) = build_fc(4, 3);
+        assert_eq!(n_hosts, 4 * 3);
         basic_net_checks(&net);
 
         assert!(
