@@ -16,7 +16,7 @@ pub mod routing;
 mod server;
 mod tcp;
 
-const Q_SIZE: usize = 1 << 10;
+const Q_SIZE: usize = 1 << 13;
 
 /// Datacenter network model events
 pub enum NetworkEvent {
@@ -84,7 +84,14 @@ pub fn build_network(n_racks: usize, time_limit: u64, n_cpus: usize) {
     //let time_limit: u64 = 1_000_000_000;
 
     println!("Setup...");
-    let world = World::new(n_racks);
+    //let net = routing::build_fc(5, 4);
+    //let n_hosts = 5 * 4;
+    let u = 4;
+    let d = 4;
+    let k = u + d;
+    let net = routing::build_clos(u, d);
+    let n_hosts = k * k / 2 * d;
+    let world = World::new_from_network(net, n_hosts);
 
     println!("Run...");
     let start = Instant::now();
@@ -94,6 +101,7 @@ pub fn build_network(n_racks: usize, time_limit: u64, n_cpus: usize) {
     let n_thread = counts.len();
     let n_cpus = std::cmp::min(n_cpus, n_thread);
 
+    // TODO make general
     // each ToR sends to n_racks-1 racks and n_racks-1 servers
     // each server (n_racks^2) is connected to 1 ToR
     let n_links = (n_racks * 2 * (n_racks - 1) + (n_racks * (n_racks - 1))) as u64;
@@ -142,7 +150,7 @@ pub fn build_network(n_racks: usize, time_limit: u64, n_cpus: usize) {
 #[derive(Debug)]
 struct World {
     /// The actors themselves
-    racks: Vec<Router>,
+    routers: Vec<Router>,
     servers: Vec<Server>,
 
     /// Communication channels from us (the world) to the actors
@@ -157,8 +165,88 @@ struct World {
 /// Setthing up and running the simulation are done in two phases. This feels like good design, but
 /// it is not clear to me why.
 impl World {
+    pub fn new_from_network(network: Network, n_hosts: usize) -> World {
+        let mut server_builders: Vec<ServerBuilder> = Vec::new();
+        let mut router_builders: Vec<RouterBuilder> = Vec::new();
+
+        // Host builders, they don't connect to anything else
+        for id in 1..n_hosts + 1 {
+            server_builders.push(ServerBuilder::new(id));
+        }
+
+        // Router builders, we can connect those we know about
+        for id in n_hosts + 1..network.len() + 1 {
+            let mut rb = RouterBuilder::new(id);
+            for &n in &network[&id] {
+                // skip those who are not connected yet...
+                if n >= id {
+                    continue;
+                }
+
+                if n <= n_hosts {
+                    server_builders.get_mut(n - 1).unwrap().connect(&mut rb);
+                } else {
+                    router_builders
+                        .get_mut(n - n_hosts - 1)
+                        .unwrap()
+                        .connect(&mut rb);
+                }
+            }
+            router_builders.push(rb);
+        }
+
+        // Routing ---------------------------------------------
+        for r in router_builders.iter_mut() {
+            let rack_id = r.id;
+
+            let routes = route_id(&network, rack_id);
+            r.install_routes(routes);
+        }
+
+        // Instatiate everyone world
+        let mut chans = HashMap::new();
+        let mut servers = vec![];
+        for mut b in server_builders {
+            chans.insert(b.id, b.connect_world());
+            servers.push(b.build());
+        }
+
+        let mut routers = vec![];
+        for mut rb in router_builders {
+            chans.insert(rb.id, rb.connect_world());
+            routers.push(rb.build());
+        }
+
+        // Flows -----------------------------------------------
+        let mut flow_id = 0;
+        for src in servers.iter() {
+            for dst in servers.iter() {
+                // skip self flows...
+                if src.id == dst.id {
+                    continue;
+                }
+
+                let f = Flow::new(flow_id, src.id, dst.id, 100000000);
+                flow_id += 1;
+
+                chans[&src.id]
+                    .push(Event {
+                        src: 0,
+                        time: 0,
+                        event_type: EventType::ModelEvent(NetworkEvent::Flow(f)),
+                    })
+                    .unwrap();
+            }
+        }
+
+        World {
+            servers,
+            routers,
+            chans,
+        }
+    }
     /// Sets up a world ready for simulation
-    pub fn new(n_racks: usize) -> World {
+    pub fn _new(n_racks: usize) -> World {
         // TODO pass as argument
         let servers_per_rack = n_racks - 1;
 
@@ -227,10 +315,10 @@ impl World {
             servers.push(b.build());
         }
 
-        let mut racks = vec![];
+        let mut routers = vec![];
         for mut rb in rack_builders {
             chans.insert(rb.id, rb.connect_world());
-            racks.push(rb.build());
+            routers.push(rb.build());
         }
 
         // Flows -----------------------------------------------
@@ -257,7 +345,7 @@ impl World {
 
         // return world
         World {
-            racks,
+            routers,
             servers,
             chans,
         }
@@ -271,7 +359,6 @@ impl World {
         for (_, c) in self.chans.iter_mut() {
             c.push(Event {
                 time: done,
-                //real_time: 0,
                 src: 0,
                 event_type: EventType::Close,
             })
@@ -283,7 +370,7 @@ impl World {
         for s in self.servers {
             actors.push(Box::new(s));
         }
-        for r in self.racks {
+        for r in self.routers {
             actors.push(Box::new(r));
         }
 
