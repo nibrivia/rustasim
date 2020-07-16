@@ -83,19 +83,65 @@ pub fn route_id(network: &Network, source_id: usize) -> HashMap<usize, usize> {
     route
 }
 
-/// Bi-directionally connects the
+/// Bi-directionally connects `src` with `dst` in the `net` Netowrk
 pub fn connect(net: &mut Network, src: usize, dst: usize) {
     net.get_mut(&src).unwrap().push(dst);
     net.get_mut(&dst).unwrap().push(src);
 }
 
-/// Builds a 3:1 folded CLOS network of 648 hosts, like the Opera paper
+/// Builds a fully connected network
 ///
-/// See the [Opera
-/// simulator](https://github.com/TritonNetworking/opera-sim/blob/master/src/clos/datacenter/fat_tree_topology_3to1_k12.cpp)
-/// for more details.
+/// This is mostly useful as a toy example, in order for the racks to be balanced, there should be
+/// `n_racks-1` servers per rack as each rack is connected to `n_racks-1` other racks...
 ///
-/// At some point should probably become more general
+/// The hosts (servers) are reliably the lowest ids.  For the 648 host example this means the
+/// servers have IDs 0 through 647. The number of hosts is `n_racks*servers_per_rack`.
+pub fn build_fc(n_racks: usize, hosts_per_rack: usize) -> Network {
+    let mut net = Network::new();
+
+    let n_hosts = n_racks * hosts_per_rack;
+
+    let n_devices = n_hosts + n_racks;
+
+    let mut ids: Vec<usize> = Vec::new();
+    for id in 1..n_devices + 1 {
+        ids.push(id);
+        net.insert(id, vec![]);
+    }
+
+    let (hosts, racks) = ids.split_at(n_hosts);
+
+    // hosts <> racks, each host connected to 1 rack
+    for (host_ix, &host_id) in hosts.iter().enumerate() {
+        let rack_id = racks[host_ix / hosts_per_rack];
+        connect(&mut net, host_id, rack_id);
+    }
+
+    // racks <> racks, each rack connected to all others
+    for (rack_ix, &src_id) in racks.iter().enumerate() {
+        for &dst_id in racks[(rack_ix + 1)..].iter() {
+            connect(&mut net, src_id, dst_id);
+        }
+    }
+
+    net
+}
+
+/// Builds a folded CLOS network with `u` uplinks and `d` downlinks
+///
+/// The switches in this topology have `k = u+d` ports. `u` represents the number of uplinks from a
+/// ToR, `d` the number of downlinks.  Within the tree, the switches are balanced, with `k/2` up-
+/// and down- links.
+///
+/// `build_clos(3, 9)` creates a 3:1 oversubscribed CLOS topology with `k=12` with 648 hosts.
+///
+/// The hosts (servers) are reliably the lowest ids.  For the 648 host example this means the
+/// servers have IDs 1 through 648. The number of hosts is `k*k/2*d`: number of pods * racks/pod *
+/// servers/rack.
+///
+/// This function's primary goal is to produce the same results as the [Opera implementation].
+///
+/// [Opera implementation]: https://github.com/TritonNetworking/opera-sim/blob/master/src/clos/datacenter/fat_tree_topology_3to1_k12.cpp
 pub fn build_clos(u: usize, d: usize) -> Network {
     let mut net = Network::new();
 
@@ -115,37 +161,26 @@ pub fn build_clos(u: usize, d: usize) -> Network {
 
     let n_devices = n_hosts + n_racks + n_upper_pods + n_cores;
 
-    let mut hosts: Vec<usize> = Vec::new();
-    for id in 0..n_devices {
-        hosts.push(id);
+    let mut ids: Vec<usize> = Vec::new();
+    for id in 1..n_devices + 1 {
+        ids.push(id);
         net.insert(id, vec![]);
     }
 
-    let mut racks = hosts.split_off(n_hosts);
-    let mut upper_pods = racks.split_off(n_racks);
-    let cores = upper_pods.split_off(n_upper_pods);
+    let (hosts, ids) = ids.split_at(n_hosts);
+    let (racks, ids) = ids.split_at(n_racks);
+    let (upper_pods, cores) = ids.split_at(n_upper_pods);
 
     // hosts <> racks, each host connected to 1 rack
     for (host_ix, &host_id) in hosts.iter().enumerate() {
         let rack_id = racks[host_ix / hosts_per_rack];
         connect(&mut net, host_id, rack_id);
-        println!(
-            "host {} #{} connecting to rack {} #{}",
-            host_ix,
-            host_id,
-            host_ix / hosts_per_rack,
-            rack_id,
-        );
     }
 
     // racks <> upper pod, each rack connected to 3 upper pods
     for (rack_ix, &rack_id) in racks.iter().enumerate() {
         let pod_id = rack_ix / racks_per_pod;
         for upod_offset in 0..upper_per_pod {
-            println!(
-                "rack {} #{} in pod {} connected to upod {} #...",
-                rack_ix, rack_id, pod_id, upod_offset
-            );
             let upper_pod_id = upper_pods[pod_id * upper_per_pod + upod_offset];
             connect(&mut net, rack_id, upper_pod_id);
         }
@@ -155,12 +190,6 @@ pub fn build_clos(u: usize, d: usize) -> Network {
     for (upod_ix, &upod_id) in upper_pods.iter().enumerate() {
         let core_offset = k / 2 * (upod_ix % upper_per_pod);
         for core_ix in 0..(k / 2) {
-            println!(
-                "upod {} #{} connecting to core {} #...",
-                upod_ix,
-                upod_id,
-                core_offset + core_ix,
-            );
             let core_id = cores[core_offset + core_ix];
             connect(&mut net, upod_id, core_id);
         }
@@ -233,7 +262,7 @@ mod test {
         basic_net_checks(&net);
 
         for (&node, neighbs) in &net {
-            if node < n_hosts {
+            if node <= n_hosts {
                 assert!(
                     neighbs.len() == 1,
                     "Host {} connected to >1 racks: {:?}!",
@@ -261,7 +290,7 @@ mod test {
         basic_net_checks(&net);
 
         for (&node, neighbs) in &net {
-            if node < n_hosts {
+            if node <= n_hosts {
                 assert!(
                     neighbs.len() == 1,
                     "Host {} connected to >1 racks: {:?}!",
@@ -278,8 +307,8 @@ mod test {
             }
         }
 
-        //let route = route_id(&net, 1);
-        //basic_route_checks(&net, &route, 1);
+        let route = route_id(&net, 1);
+        basic_route_checks(&net, &route, 1);
     }
 
     #[test]
@@ -289,7 +318,7 @@ mod test {
         basic_net_checks(&net);
 
         for (&node, neighbs) in &net {
-            if node < n_hosts {
+            if node <= n_hosts {
                 assert!(
                     neighbs.len() == 1,
                     "Host {} connected to >1 racks: {:?}!",
@@ -308,6 +337,41 @@ mod test {
 
         //let route = route_id(&net, 1);
         //basic_route_checks(&net, &route, 1);
+    }
+
+    #[test]
+    fn fc_4racks_3hosts() {
+        let net = build_fc(4, 3);
+        let n_hosts = 4 * 3;
+        basic_net_checks(&net);
+
+        assert!(
+            net.len() == n_hosts + 4,
+            "Expected {} devices, found {}",
+            n_hosts + 4,
+            net.len()
+        );
+
+        for (&node, neighbs) in &net {
+            if node <= n_hosts {
+                assert!(
+                    neighbs.len() == 1,
+                    "Host {} connected to >1 racks: {:?}!",
+                    node,
+                    neighbs
+                );
+            } else {
+                assert!(
+                    neighbs.len() == 6,
+                    "Host {} connected to != 8 racks: {:?}!",
+                    node,
+                    neighbs
+                );
+            }
+        }
+
+        let route = route_id(&net, 1);
+        basic_route_checks(&net, &route, 1);
     }
 
     #[test]
