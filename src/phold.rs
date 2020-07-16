@@ -215,6 +215,7 @@ pub fn run(n_actors: usize, mut time_limit: Time, n_threads: usize) {
     for id in 0..n_actors {
         let outs = out_queues.pop().unwrap();
         let ins = in_queues.pop().unwrap();
+
         let a = Actor::new(id, outs, ins, time_limit); // TODO
         actors.push(Box::new(a) as Box<dyn Advancer<Time, Res> + Send>);
     }

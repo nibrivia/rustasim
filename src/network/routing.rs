@@ -83,6 +83,92 @@ pub fn route_id(network: &Network, source_id: usize) -> HashMap<usize, usize> {
     route
 }
 
+/// Bi-directionally connects the
+pub fn connect(net: &mut Network, src: usize, dst: usize) {
+    net.get_mut(&src).unwrap().push(dst);
+    net.get_mut(&dst).unwrap().push(src);
+}
+
+/// Builds a 3:1 folded CLOS network of 648 hosts, like the Opera paper
+///
+/// See the [Opera
+/// simulator](https://github.com/TritonNetworking/opera-sim/blob/master/src/clos/datacenter/fat_tree_topology_3to1_k12.cpp)
+/// for more details.
+///
+/// At some point should probably become more general
+pub fn build_clos(u: usize, d: usize) -> Network {
+    let mut net = Network::new();
+
+    let k = u + d;
+
+    let n_pods = k; // this is the number of pods a single core can support
+
+    let hosts_per_rack = d; // by definition of d
+    let upper_per_pod = u; // by definition of u
+
+    let racks_per_pod = k / 2; // because upods are evenly matched, each upod connected to all racks
+    let n_cores = upper_per_pod * k / 2; // it takes all the upods of a pod to connect to all the cores
+
+    let n_upper_pods = n_pods * upper_per_pod;
+    let n_racks = n_pods * racks_per_pod;
+    let n_hosts = n_racks * hosts_per_rack;
+
+    let n_devices = n_hosts + n_racks + n_upper_pods + n_cores;
+
+    let mut hosts: Vec<usize> = Vec::new();
+    for id in 0..n_devices {
+        hosts.push(id);
+        net.insert(id, vec![]);
+    }
+
+    let mut racks = hosts.split_off(n_hosts);
+    let mut upper_pods = racks.split_off(n_racks);
+    let cores = upper_pods.split_off(n_upper_pods);
+
+    // hosts <> racks, each host connected to 1 rack
+    for (host_ix, &host_id) in hosts.iter().enumerate() {
+        let rack_id = racks[host_ix / hosts_per_rack];
+        connect(&mut net, host_id, rack_id);
+        println!(
+            "host {} #{} connecting to rack {} #{}",
+            host_ix,
+            host_id,
+            host_ix / hosts_per_rack,
+            rack_id,
+        );
+    }
+
+    // racks <> upper pod, each rack connected to 3 upper pods
+    for (rack_ix, &rack_id) in racks.iter().enumerate() {
+        let pod_id = rack_ix / racks_per_pod;
+        for upod_offset in 0..upper_per_pod {
+            println!(
+                "rack {} #{} in pod {} connected to upod {} #...",
+                rack_ix, rack_id, pod_id, upod_offset
+            );
+            let upper_pod_id = upper_pods[pod_id * upper_per_pod + upod_offset];
+            connect(&mut net, rack_id, upper_pod_id);
+        }
+    }
+
+    // upper pod <> core, the first up connected to the first 6 cores
+    for (upod_ix, &upod_id) in upper_pods.iter().enumerate() {
+        let core_offset = k / 2 * (upod_ix % upper_per_pod);
+        for core_ix in 0..(k / 2) {
+            println!(
+                "upod {} #{} connecting to core {} #...",
+                upod_ix,
+                upod_id,
+                core_offset + core_ix,
+            );
+            let core_id = cores[core_offset + core_ix];
+            connect(&mut net, upod_id, core_id);
+        }
+    }
+
+    net
+}
+
 #[cfg(test)]
 mod test {
     use crate::network::routing::*;
@@ -101,6 +187,8 @@ mod test {
                 );
             }
         }
+
+        // TODO assert distinct?
     }
 
     fn basic_route_checks(network: &Network, route: &HashMap<usize, usize>, source: usize) {
@@ -136,6 +224,90 @@ mod test {
                 network[&source],
             );
         }
+    }
+
+    #[test]
+    fn clos_k12_u3d9() {
+        let net = build_clos(3, 9);
+        let n_hosts = 648;
+        basic_net_checks(&net);
+
+        for (&node, neighbs) in &net {
+            if node < n_hosts {
+                assert!(
+                    neighbs.len() == 1,
+                    "Host {} connected to >1 racks: {:?}!",
+                    node,
+                    neighbs
+                );
+            } else {
+                assert!(
+                    neighbs.len() == 12,
+                    "Host {} connected to != 12 racks: {:?}!",
+                    node,
+                    neighbs
+                );
+            }
+        }
+
+        //let route = route_id(&net, 1);
+        //basic_route_checks(&net, &route, 1);
+    }
+
+    #[test]
+    fn clos_k8_u2d6() {
+        let net = build_clos(2, 6);
+        let n_hosts = 192;
+        basic_net_checks(&net);
+
+        for (&node, neighbs) in &net {
+            if node < n_hosts {
+                assert!(
+                    neighbs.len() == 1,
+                    "Host {} connected to >1 racks: {:?}!",
+                    node,
+                    neighbs
+                );
+            } else {
+                assert!(
+                    neighbs.len() == 8,
+                    "Host {} connected to != 8 racks: {:?}!",
+                    node,
+                    neighbs
+                );
+            }
+        }
+
+        //let route = route_id(&net, 1);
+        //basic_route_checks(&net, &route, 1);
+    }
+
+    #[test]
+    fn clos_k12_u6d18() {
+        let net = build_clos(6, 18);
+        let n_hosts = 5_184;
+        basic_net_checks(&net);
+
+        for (&node, neighbs) in &net {
+            if node < n_hosts {
+                assert!(
+                    neighbs.len() == 1,
+                    "Host {} connected to >1 racks: {:?}!",
+                    node,
+                    neighbs
+                );
+            } else {
+                assert!(
+                    neighbs.len() == 24,
+                    "Host {} connected to != 24 racks: {:?}!",
+                    node,
+                    neighbs
+                );
+            }
+        }
+
+        //let route = route_id(&net, 1);
+        //basic_route_checks(&net, &route, 1);
     }
 
     #[test]

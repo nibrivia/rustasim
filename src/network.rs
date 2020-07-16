@@ -166,8 +166,6 @@ impl World {
         let mut next_id = 1;
         let mut network = Network::new(); // for routing
 
-        // TODO backbone switches
-
         // Racks -----------------------------------------------
         let mut rack_builders: Vec<RouterBuilder> = Vec::new();
 
