@@ -11,7 +11,8 @@ use atomic_counter::RelaxedCounter;
 //use crossbeam_deque::Worker;
 use crate::worker::{run, Advancer, LockedTaskHeap};
 use std::cmp::Ordering;
-use std::collections::BinaryHeap;
+//use std::collections::BinaryHeap;
+use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -72,15 +73,14 @@ pub fn start<T: 'static + Ord + Copy + Debug + Send + num::Zero, R: 'static + Se
     mut actors: Vec<Box<dyn Advancer<T, R> + Send>>,
 ) -> Vec<R> {
     // Start the workers
-    let mut handles = Vec::new();
     let n_actors = actors.len();
     let shared_counter = Arc::new(RelaxedCounter::new(0));
 
     // Initialize the heaps
-    let n_heaps = 16;
+    let n_heaps = 32;
     let mut heaps = Vec::new();
     for _ in 0..n_heaps {
-        let task_heap: LockedTaskHeap<T, R> = Arc::new(Mutex::new(BinaryHeap::new()));
+        let task_heap: LockedTaskHeap<T, R> = Arc::new(Mutex::new(VecDeque::new()));
         heaps.push(task_heap);
     }
 
@@ -88,10 +88,12 @@ pub fn start<T: 'static + Ord + Copy + Debug + Send + num::Zero, R: 'static + Se
         let heap_ix = i % n_heaps;
         let frozen = FrozenActor {
             time: T::zero(),
-            actor: actor,
+            actor,
         };
-        heaps[heap_ix].lock().unwrap().push(frozen);
+        heaps[heap_ix].lock().unwrap().push_back(frozen);
     }
+
+    let mut handles = Vec::new();
     for i in 0..num_cpus {
         // start this worker
         handles.push({

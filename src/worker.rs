@@ -21,12 +21,13 @@ use atomic_counter::{AtomicCounter, RelaxedCounter};
 use crate::FrozenActor;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use std::collections::BinaryHeap;
+//use std::collections::BinaryHeap;
+use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 
 /// Convenience wrapper for a reference counted, distributed heap of frozen actors...
-pub type LockedTaskHeap<T, R> = Arc<Mutex<BinaryHeap<FrozenActor<T, R>>>>;
+pub type LockedTaskHeap<T, R> = Arc<Mutex<VecDeque<FrozenActor<T, R>>>>;
 
 /// Return value for actors to use to signal their state to the workers
 #[derive(Debug)]
@@ -71,29 +72,43 @@ pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
     let mut rng = thread_rng();
 
     // initial task
-    let mut task = task_heap.choose(&mut rng).unwrap().lock().unwrap().pop();
+    let mut task = task_heap
+        .choose(&mut rng)
+        .unwrap()
+        .lock()
+        .unwrap()
+        .pop_front();
     loop {
         if let Some(mut frozen_actor) = task {
-            //println!("{} task start", id);
             match frozen_actor.actor.advance() {
                 ActorState::Continue(time) => {
                     frozen_actor.time = time;
                     let mut heap = task_heap.choose(&mut rng).unwrap().lock().unwrap();
-                    heap.push(frozen_actor);
-                    task = heap.pop();
+                    heap.push_back(frozen_actor);
+                    task = heap.pop_front();
                 }
                 ActorState::Done(count) => {
                     counts.push(count);
                     counter.inc();
-                    task = task_heap.choose(&mut rng).unwrap().lock().unwrap().pop();
+                    task = task_heap
+                        .choose(&mut rng)
+                        .unwrap()
+                        .lock()
+                        .unwrap()
+                        .pop_front();
                 }
             }
-        //println!("{} task done", id);
         } else if counter.get() == n_tasks {
             println!("{} finished", id);
             return counts;
         } else {
-            task = task_heap.choose(&mut rng).unwrap().lock().unwrap().pop();
+            //println!("huh");
+            task = task_heap
+                .choose(&mut rng)
+                .unwrap()
+                .lock()
+                .unwrap()
+                .pop_front();
         }
     }
 }

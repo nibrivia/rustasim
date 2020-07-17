@@ -85,7 +85,7 @@ pub fn build_network(n_racks: usize, time_limit: u64, n_cpus: usize) {
 
     println!("Setup...");
     //let (net, n_hosts) = routing::build_fc(5, 4);
-    let (net, n_hosts) = routing::build_clos(3, 9);
+    let (net, n_hosts) = routing::build_clos(2, 6);
     let world = World::new_from_network(net, n_hosts);
 
     println!("Run...");
@@ -193,12 +193,13 @@ impl World {
 
         // Routing ---------------------------------------------
         println!("  Routing...");
-        for r in router_builders.iter_mut() {
-            let rack_id = r.id;
-
-            let routes = route_all(&network, rack_id);
-            r.install_routes(routes);
-        }
+        router_builders
+            .iter_mut()
+            .map(|r| {
+                let routes = route_all(&network, r.id);
+                r.install_routes(routes);
+            })
+            .for_each(drop);
 
         // Instatiate everyone world
         let mut chans = HashMap::new();
