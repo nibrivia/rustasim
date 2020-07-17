@@ -78,7 +78,7 @@ pub trait Connectable {
 /// Builds and runs a network with the given parameters
 ///
 /// TODO more...
-pub fn build_network(n_racks: usize, time_limit: u64, n_cpus: usize) {
+pub fn build_network(_n_racks: usize, time_limit: u64, n_cpus: usize) {
     // TODO pass in time_limit, n_threads as arguments
 
     //let time_limit: u64 = 1_000_000_000;
@@ -86,6 +86,7 @@ pub fn build_network(n_racks: usize, time_limit: u64, n_cpus: usize) {
     println!("Setup...");
     //let (net, n_hosts) = routing::build_fc(5, 4);
     let (net, n_hosts) = routing::build_clos(2, 6);
+    let n_links: u64 = (&net).iter().map(|(_, v)| v.len() as u64).sum();
     let world = World::new_from_network(net, n_hosts);
 
     println!("Run...");
@@ -99,7 +100,6 @@ pub fn build_network(n_racks: usize, time_limit: u64, n_cpus: usize) {
     // TODO make general
     // each ToR sends to n_racks-1 racks and n_racks-1 servers
     // each server (n_racks^2) is connected to 1 ToR
-    let n_links = (n_racks * 2 * (n_racks - 1) + (n_racks * (n_racks - 1))) as u64;
 
     // stats...
     let sum_count = counts.iter().sum::<u64>();
