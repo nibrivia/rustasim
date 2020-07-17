@@ -4,6 +4,7 @@
 //! standard initial map. This may change in the future, I'm not sure...
 
 use std::collections::HashMap;
+use std::collections::VecDeque;
 
 /// Convenient wrapper for the network description
 pub type Network = HashMap<usize, Vec<usize>>;
@@ -47,14 +48,14 @@ pub fn route_id(network: &Network, source_id: usize) -> HashMap<usize, usize> {
     route_cost.insert(source_id, (source_id, 0)); // self routing is weird...
 
     // initialize queeu with neighbours
-    let mut queue = vec![];
+    let mut queue = VecDeque::new();
     for neighb in &network[&source_id] {
-        queue.push((*neighb, *neighb, 1));
+        queue.push_back((*neighb, *neighb, 1));
     }
 
     while !queue.is_empty() {
         // this is the new candidate and its cost
-        let (id, source, cost) = queue.pop().unwrap();
+        let (id, source, cost) = queue.pop_front().unwrap();
 
         // only keep going if the new cost is lower
         if let Some((_, cur_cost)) = route_cost.get(&id) {
@@ -69,7 +70,7 @@ pub fn route_id(network: &Network, source_id: usize) -> HashMap<usize, usize> {
         // Add our neighbours to the queue
         for neighbour_id in &network[&id] {
             // add neighbour to the queue
-            queue.push((*neighbour_id, source, cost + 1));
+            queue.push_back((*neighbour_id, source, cost + 1));
         }
     }
 
@@ -120,15 +121,15 @@ pub fn route_all(network: &Network, source_id: usize) -> HashMap<usize, Vec<usiz
     let mut route_cost = HashMap::new();
     route_cost.insert(source_id, (vec![source_id], 0)); // self routing is weird...
 
-    // initialize queeu with neighbours
-    let mut queue = vec![];
+    // initialize queue with neighbours
+    let mut queue = VecDeque::new();
     for neighb in &network[&source_id] {
-        queue.push((*neighb, *neighb, 1));
+        queue.push_back((*neighb, *neighb, 1));
     }
 
     while !queue.is_empty() {
         // this is the new candidate and its cost
-        let (id, source, cost) = queue.pop().unwrap();
+        let (id, source, cost) = queue.pop_front().unwrap();
 
         // only keep going if the new cost is lower
         if let Some(&(_, cur_cost)) = route_cost.get(&id) {
@@ -154,7 +155,7 @@ pub fn route_all(network: &Network, source_id: usize) -> HashMap<usize, Vec<usiz
         // Add our neighbours to the queue
         for neighbour_id in &network[&id] {
             // add neighbour to the queue
-            queue.push((*neighbour_id, source, cost + 1));
+            queue.push_back((*neighbour_id, source, cost + 1));
         }
     }
 
