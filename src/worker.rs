@@ -54,8 +54,6 @@ where
 }
 
 /// Runs until no more progress can be made at all...
-///
-/// TODO: pulled from crossbeam's documentation, figure more about how it works
 pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
     id: usize,
     counter: Arc<RelaxedCounter>,

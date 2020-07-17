@@ -84,14 +84,12 @@ impl Connectable for &mut RouterBuilder {
     }
 }
 
-// TODO extract a build
 impl RouterBuilder {
-    // TODO document
     /// Creates a new RouterBuilder with sensible defaults
     pub fn new(id: usize) -> RouterBuilder {
         RouterBuilder {
             id,
-            latency_ns: 100,
+            latency_ns: 500,
             ns_per_byte: 1,
 
             id_to_ix: HashMap::new(),

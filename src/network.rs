@@ -8,7 +8,9 @@ use crate::network::tcp::*;
 use crate::start;
 use crate::worker::Advancer;
 use crossbeam_queue::spsc::Producer;
+use csv::ReaderBuilder;
 use std::collections::HashMap;
+use std::error::Error;
 use std::time::Instant;
 
 mod router;
@@ -78,16 +80,60 @@ pub trait Connectable {
 /// Builds and runs a network with the given parameters
 ///
 /// TODO more...
-pub fn build_network(_n_racks: usize, time_limit: u64, n_cpus: usize) {
+pub fn build_network(
+    _n_racks: usize,
+    time_limit: u64,
+    n_cpus: usize,
+) -> Result<(), Box<dyn Error>> {
     // TODO pass in time_limit, n_threads as arguments
 
     //let time_limit: u64 = 1_000_000_000;
 
     println!("Setup...");
     //let (net, n_hosts) = routing::build_fc(5, 4);
-    let (net, n_hosts) = routing::build_clos(2, 6);
+    let (net, n_hosts) = routing::build_clos(3, 9);
     let n_links: u64 = (&net).iter().map(|(_, v)| v.len() as u64).sum();
-    let world = World::new_from_network(net, n_hosts);
+    let mut world = World::new_from_network(net, n_hosts);
+
+    // Flows
+    let mut flows = Vec::new();
+    let flow_rdr = ReaderBuilder::new()
+        .has_headers(false)
+        .delimiter(b' ')
+        .from_path("/home/nibr/opera-sim/Figure7_datamining/3to1_clos/traffic_gen/flows_25percLoad_10sec_648hosts_3to1.htsim")
+        .expect("File open failed");
+
+    for (flow_id, try_line) in flow_rdr.into_records().enumerate() {
+        let line = try_line?;
+
+        // source is 0-indexed...
+        let src = line[0].parse::<usize>()? + 1;
+        let dst = line[1].parse::<usize>()? + 1;
+        let size_byte = line[2].parse::<u64>()?;
+        let time = line[3].parse::<u64>()?;
+
+        if time > time_limit {
+            break;
+        }
+
+        let flow = Flow::new(flow_id, src, dst, size_byte);
+        flows.push((time, flow));
+    }
+    /*
+    for src_id in 1..(n_hosts + 1) {
+        for dst_id in 1..(n_hosts + 1) {
+            // skip self flows...
+            if src_id == dst_id {
+                continue;
+            }
+
+            let f = Flow::new(flow_id, src_id, dst_id, 100000000);
+            flow_id += 1;
+            flows.push(f);
+        }
+    }
+    */
+    world.add_flows(flows);
 
     println!("Run...");
     let start = Instant::now();
@@ -137,6 +183,7 @@ pub fn build_network(_n_racks: usize, time_limit: u64, n_cpus: usize) {
     );
 
     println!("done");
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -213,35 +260,13 @@ impl World {
             routers.push(rb.build());
         }
 
-        // Flows -----------------------------------------------
-        println!("  Init flows...");
-        let mut flow_id = 0;
-        for src in servers.iter() {
-            for dst in servers.iter() {
-                // skip self flows...
-                if src.id == dst.id {
-                    continue;
-                }
-
-                let f = Flow::new(flow_id, src.id, dst.id, 100000000);
-                flow_id += 1;
-
-                chans[&src.id]
-                    .push(Event {
-                        src: 0,
-                        time: 0,
-                        event_type: EventType::ModelEvent(NetworkEvent::Flow(f)),
-                    })
-                    .unwrap();
-            }
-        }
-
         World {
             servers,
             routers,
             chans,
         }
     }
+
     /// Sets up a world ready for simulation
     pub fn _new(n_racks: usize) -> World {
         // TODO pass as argument
@@ -318,33 +343,26 @@ impl World {
             routers.push(rb.build());
         }
 
-        // Flows -----------------------------------------------
-        let mut flow_id = 0;
-        for src in servers.iter() {
-            for dst in servers.iter() {
-                // skip self flows...
-                if src.id == dst.id {
-                    continue;
-                }
-
-                let f = Flow::new(flow_id, src.id, dst.id, 100000000);
-                flow_id += 1;
-
-                chans[&src.id]
-                    .push(Event {
-                        src: 0,
-                        time: 0,
-                        event_type: EventType::ModelEvent(NetworkEvent::Flow(f)),
-                    })
-                    .unwrap();
-            }
-        }
-
         // return world
         World {
             routers,
             servers,
             chans,
+        }
+    }
+
+    /// Adds specified flows to the current network
+    pub fn add_flows(&mut self, flows: Vec<(u64, Flow)>) {
+        println!("  Init flows...");
+        for (time, f) in flows {
+            println!("{:?}", f);
+            self.chans[&f.src]
+                .push(Event {
+                    src: 0,
+                    time,
+                    event_type: EventType::ModelEvent(NetworkEvent::Flow(f)),
+                })
+                .unwrap();
         }
     }
 

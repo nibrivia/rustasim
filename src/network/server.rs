@@ -95,7 +95,7 @@ impl ServerBuilder {
             id,
 
             ns_per_byte: 1,
-            latency_ns: 100,
+            latency_ns: 500,
 
             id_to_ix,
             ix_to_id,

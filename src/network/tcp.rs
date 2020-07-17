@@ -53,13 +53,13 @@ pub struct Flow {
 
 impl Flow {
     /// Creates a new flow
-    pub fn new(flow_id: usize, src: usize, dst: usize, n_packets: u64) -> Flow {
+    pub fn new(flow_id: usize, src: usize, dst: usize, size_byte: u64) -> Flow {
         Flow {
             flow_id,
             src,
             dst,
 
-            size_byte: n_packets * BYTES_PER_PACKET,
+            size_byte,
             cwnd: 4,
             next_seq: 0,
         }
@@ -69,7 +69,10 @@ impl Flow {
     pub fn start(&mut self) -> (Vec<Packet>, Vec<u64>) {
         let mut packets = Vec::new();
         for _ in 0..self.cwnd {
-            packets.push(self.next().unwrap());
+            match self.next() {
+                None => break,
+                Some(p) => packets.push(p),
+            }
         }
 
         (packets, Vec::new())
