@@ -83,11 +83,7 @@ where
 ///
 /// # Examples
 ///
-/// ```
-/// // empty model for testing
 /// // TODO
-///
-/// ```
 #[derive(Debug)]
 pub struct Merger<T, U>
 where
@@ -130,10 +126,7 @@ where
 ///
 /// # Examples
 ///
-/// ```
-/// //let indices = rustasim::synchronizer::ltr_walk(6);
-/// //assert_eq!(indices, vec![4, 2, 5, 1, 3]);
-/// ```
+/// // TODO
 ///
 fn ltr_walk(n_nodes: usize) -> Vec<usize> {
     let n_layers = (n_nodes as f32).log2().ceil() as usize;

@@ -355,7 +355,6 @@ impl World {
     pub fn add_flows(&mut self, flows: Vec<(u64, Flow)>) {
         println!("  Init flows...");
         for (time, f) in flows {
-            println!("{:?}", f);
             self.chans[&f.src]
                 .push(Event {
                     src: 0,
