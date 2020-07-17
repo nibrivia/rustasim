@@ -73,12 +73,7 @@ pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
     let mut rng = thread_rng();
 
     // initial task
-    let mut task = task_heap
-        .choose(&mut rng)
-        .unwrap()
-        .lock()
-        //.unwrap()
-        .pop_front();
+    let mut task = task_heap.choose(&mut rng).unwrap().lock().pop_front();
     loop {
         if let Some(mut frozen_actor) = task {
             match frozen_actor.actor.advance() {
@@ -91,12 +86,7 @@ pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
                 ActorState::Done(count) => {
                     counts.push(count);
                     counter.inc();
-                    task = task_heap
-                        .choose(&mut rng)
-                        .unwrap()
-                        .lock()
-                        //.unwrap()
-                        .pop_front();
+                    task = task_heap.choose(&mut rng).unwrap().lock().pop_front();
                 }
             }
         } else if counter.get() == n_tasks {
@@ -104,12 +94,7 @@ pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
             return counts;
         } else {
             //println!("huh");
-            task = task_heap
-                .choose(&mut rng)
-                .unwrap()
-                .lock()
-                //.unwrap()
-                .pop_front();
+            task = task_heap.choose(&mut rng).unwrap().lock().pop_front();
         }
     }
 }
