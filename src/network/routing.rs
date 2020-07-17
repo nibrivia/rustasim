@@ -31,7 +31,6 @@ pub type Network = HashMap<usize, Vec<usize>>;
 ///
 /// // route from 1
 /// let route = route_id(&network, 1);
-/// // assert_eq!(route[&1], 0);
 /// assert_eq!(route[&2], 2);
 /// assert_eq!(route[&3], 3);
 /// assert_eq!(route[&4], 3);
@@ -39,7 +38,6 @@ pub type Network = HashMap<usize, Vec<usize>>;
 /// // route from 2
 /// let route = route_id(&network, 2);
 /// assert_eq!(route[&1], 1);
-/// // assert_eq!(route[&2], 0);
 /// assert_eq!(route[&3], 3);
 /// assert_eq!(route[&4], 3);
 /// ```
@@ -81,6 +79,90 @@ pub fn route_id(network: &Network, source_id: usize) -> HashMap<usize, usize> {
         route.insert(node, hop);
     }
     route
+}
+
+/// Very similar to `route_id`,  but returns all equal paths
+///
+/// # Examples
+///
+/// ```
+/// use std::collections::HashMap;
+/// use rustasim::network::routing::route_all;
+///
+/// // +-- 5 --+
+/// // |       |
+/// // 1 - 2 - 3 - 4
+/// let mut network = HashMap::new();
+/// network.insert(1, vec![2, 5]);
+/// network.insert(2, vec![1, 3]);
+/// network.insert(3, vec![5, 2, 4]);
+/// network.insert(4, vec![3]);
+/// network.insert(5, vec![1, 3]);
+///
+/// // route from 1
+/// let mut route = route_all(&network, 1);
+/// for (_, r) in route.iter_mut() { r.sort(); } // for ease of testing
+/// assert_eq!(route[&2], vec![2]);
+/// assert_eq!(route[&3], vec![2, 5]);
+/// assert_eq!(route[&4], vec![2, 5]);
+///
+/// // route from 2
+/// let mut route = route_all(&network, 2);
+/// for (_, r) in route.iter_mut() { r.sort(); } // for ease of testing
+/// assert_eq!(route[&1], vec![1]);
+/// assert_eq!(route[&3], vec![3]);
+/// assert_eq!(route[&4], vec![3]);
+/// assert_eq!(route[&5], vec![1, 3]);
+/// ```
+pub fn route_all(network: &Network, source_id: usize) -> HashMap<usize, Vec<usize>> {
+    let mut route_cost = HashMap::new();
+    route_cost.insert(source_id, (vec![source_id], 0)); // self routing is weird...
+
+    // initialize queeu with neighbours
+    let mut queue = vec![];
+    for neighb in &network[&source_id] {
+        queue.push((*neighb, *neighb, 1));
+    }
+
+    while !queue.is_empty() {
+        // this is the new candidate and its cost
+        let (id, source, cost) = queue.pop().unwrap();
+
+        // only keep going if the new cost is lower
+        if let Some(&(_, cur_cost)) = route_cost.get(&id) {
+            if cur_cost < cost {
+                continue;
+            }
+        }
+
+        // Add the path to the current node
+        if let Some((routes, cur_cost)) = route_cost.get_mut(&id) {
+            if *cur_cost == cost {
+                if !routes.contains(&source) {
+                    routes.push(source);
+                }
+            } else {
+                *routes = vec![source];
+                *cur_cost = cost;
+            }
+        } else {
+            route_cost.insert(id, (vec![source], cost));
+        }
+
+        // Add our neighbours to the queue
+        for neighbour_id in &network[&id] {
+            // add neighbour to the queue
+            queue.push((*neighbour_id, source, cost + 1));
+        }
+    }
+
+    // translate into a pure routing table, no more cost
+    let mut paths = HashMap::new();
+    for (node, (routes, _)) in route_cost {
+        paths.insert(node, routes);
+    }
+
+    paths
 }
 
 /// Bi-directionally connects `src` with `dst` in the `net` Netowrk
@@ -142,6 +224,15 @@ pub fn build_fc(n_racks: usize, hosts_per_rack: usize) -> (Network, usize) {
 /// This function's primary goal is to produce the same results as the [Opera implementation].
 ///
 /// [Opera implementation]: https://github.com/TritonNetworking/opera-sim/blob/master/src/clos/datacenter/fat_tree_topology_3to1_k12.cpp
+///
+/// # Examples
+/// ```
+/// use rustasim::network::routing::build_clos;
+///
+/// let (net, n_hosts) = build_clos(1, 3);
+/// assert_eq!(n_hosts, 24);
+/// assert_eq!(net.len(), 38);
+/// ```
 pub fn build_clos(u: usize, d: usize) -> (Network, usize) {
     let mut net = Network::new();
 
@@ -557,5 +648,105 @@ mod test {
         assert_eq!(route[&33], 30);
     }
 
-    // TODO backbone switches?
+    #[test]
+    fn multipath_clos() {
+        let (net, n_hosts) = build_clos(2, 2);
+        assert_eq!(n_hosts, 16);
+        assert_eq!(net.len(), 36);
+        basic_net_checks(&net);
+
+        // TOR Routing
+        // 17 is the first tor
+        let route = route_id(&net, 17);
+        basic_route_checks(&net, &route, 17);
+
+        let mut paths = route_all(&net, 17);
+        assert_eq!(
+            paths.len(),
+            route.len(),
+            "ToR Paths and route should have same length"
+        );
+
+        for (id, r) in route {
+            assert!(
+                paths[&id].contains(&r),
+                "Route to {} is {} but isn't in paths {:?}",
+                id,
+                r,
+                paths[&id]
+            );
+        }
+
+        // sort paths for ease of testing
+        for (_, ps) in paths.iter_mut() {
+            ps.sort();
+        }
+
+        // in-rack
+        for id in 1..(2 + 1) {
+            assert_eq!(paths[&id].len(), 1, "Expect 1 path to in-rack host {}", id);
+            assert_eq!(paths[&id][0], id, "Path to host {} should be direct", id);
+        }
+
+        // out of rack: 2 options for the two upod switches
+        for id in 3..n_hosts {
+            let ps = &paths[&id];
+            assert_eq!(ps.len(), 2, "Wrong number of paths: {:?}", ps,);
+
+            assert_eq!(ps[0], 25, "path to {} should be 25, not {}", id, ps[0]);
+            assert_eq!(ps[1], 26, "path to {} should be 26, not {}", id, ps[1]);
+        }
+
+        // Pod Routing
+        // 30 is the 2nd upod of the 3rd pod, accessing core switches 35, 36
+        // the pod has tors 21, 22 and hosts 9, 10, 11, 12
+        let route = route_id(&net, 30);
+        basic_route_checks(&net, &route, 30);
+
+        let mut paths = route_all(&net, 30);
+        assert_eq!(
+            paths.len(),
+            route.len(),
+            "Pod paths and route should have same length"
+        );
+
+        for (id, r) in route {
+            assert!(
+                paths[&id].contains(&r),
+                "Route to {} is {} but isn't in paths {:?}",
+                id,
+                r,
+                paths[&id]
+            );
+        }
+
+        // sort paths for ease of testing
+        for (_, ps) in paths.iter_mut() {
+            ps.sort();
+        }
+
+        // in-pod
+        for id in 9..(12 + 1) {
+            assert_eq!(paths[&id].len(), 1);
+
+            let tor_id = (id - 9) / 2 + 21;
+            assert_eq!(paths[&id][0], tor_id);
+        }
+
+        // out of pod: 2 options for the 2 core switches we can reach
+        for id in 1..9 {
+            let ps = &paths[&id];
+            assert_eq!(ps.len(), 2, "Expected 2 paths to oop host {}: {:?}", id, ps);
+
+            assert_eq!(ps[0], 35, "path to {} should be 26, not {}", id, ps[0]);
+            assert_eq!(ps[1], 36, "path to {} should be 26, not {}", id, ps[1]);
+        }
+        for id in 13..(16 + 1) {
+            let ps = &paths[&id];
+            assert_eq!(ps.len(), 2, "Expected 2 paths to oop host {}: {:?}", id, ps);
+
+            assert_eq!(ps[0], 35, "path to {} should be 26, not {}", id, ps[0]);
+            assert_eq!(ps[1], 36, "path to {} should be 26, not {}", id, ps[1]);
+        }
+    }
 }
