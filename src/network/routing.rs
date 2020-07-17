@@ -81,7 +81,9 @@ pub fn route_id(network: &Network, source_id: usize) -> HashMap<usize, usize> {
     route
 }
 
-/// Very similar to `route_id`,  but returns all equal paths
+/// Very similar to [`route_id`](fn.route_id.html),  but returns all minimally-equal paths
+///
+/// Route to self exists, but has no guaranteed value.
 ///
 /// # Examples
 ///

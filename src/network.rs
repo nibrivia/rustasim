@@ -2,7 +2,7 @@
 
 use crate::engine::*;
 use crate::network::router::{Router, RouterBuilder};
-use crate::network::routing::{route_id, Network};
+use crate::network::routing::{route_all, Network};
 use crate::network::server::{Server, ServerBuilder};
 use crate::network::tcp::*;
 use crate::start;
@@ -16,7 +16,7 @@ pub mod routing;
 mod server;
 mod tcp;
 
-const Q_SIZE: usize = 1 << 13;
+const Q_SIZE: usize = 1 << 14;
 
 /// Datacenter network model events
 pub enum NetworkEvent {
@@ -85,7 +85,7 @@ pub fn build_network(n_racks: usize, time_limit: u64, n_cpus: usize) {
 
     println!("Setup...");
     //let (net, n_hosts) = routing::build_fc(5, 4);
-    let (net, n_hosts) = routing::build_clos(2, 2);
+    let (net, n_hosts) = routing::build_clos(3, 9);
     let world = World::new_from_network(net, n_hosts);
 
     println!("Run...");
@@ -192,21 +192,24 @@ impl World {
         }
 
         // Routing ---------------------------------------------
+        println!("  Routing...");
         for r in router_builders.iter_mut() {
             let rack_id = r.id;
 
-            let routes = route_id(&network, rack_id);
+            let routes = route_all(&network, rack_id);
             r.install_routes(routes);
         }
 
         // Instatiate everyone world
         let mut chans = HashMap::new();
+        println!("  Build servers...");
         let mut servers = vec![];
         for mut b in server_builders {
             chans.insert(b.id, b.connect_world());
             servers.push(b.build());
         }
 
+        println!("  Build routers...");
         let mut routers = vec![];
         for mut rb in router_builders {
             chans.insert(rb.id, rb.connect_world());
@@ -214,6 +217,7 @@ impl World {
         }
 
         // Flows -----------------------------------------------
+        println!("  Init flows...");
         let mut flow_id = 0;
         for src in servers.iter() {
             for dst in servers.iter() {
@@ -299,7 +303,7 @@ impl World {
         for r in rack_builders.iter_mut() {
             let rack_id = r.id();
 
-            let routes = route_id(&network, rack_id);
+            let routes = route_all(&network, rack_id);
             r.install_routes(routes);
         }
 

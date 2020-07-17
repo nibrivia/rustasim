@@ -5,6 +5,9 @@ use crossbeam_queue::spsc::*;
 use std::collections::HashMap;
 //use std::thread;
 
+use rand::seq::SliceRandom;
+use rand::thread_rng;
+
 use crate::engine::*;
 use crate::network::{Connectable, Device, ModelEvent, NetworkEvent, Q_SIZE};
 use crate::worker::{ActorState, Advancer};
@@ -28,7 +31,7 @@ pub struct RouterBuilder {
     next_ix: usize,
 
     // route
-    route: Vec<usize>,
+    route: Vec<Vec<usize>>,
 
     // event management
     in_queues: Vec<Consumer<ModelEvent>>,
@@ -124,16 +127,21 @@ impl RouterBuilder {
     /// The motivation for an external routing is that it is significantly simpler than
     /// implementing a distributed routing algorithm. As the research might become more specific to
     /// routing, this function may loose its purpose
-    pub fn install_routes(&mut self, routes: HashMap<usize, usize>) {
-        //for (dst_id, next_hop_id) in routes {
-        self.route = vec![0];
+    pub fn install_routes(&mut self, routes: HashMap<usize, Vec<usize>>) {
+        // skip 0
+        self.route = vec![vec![]];
 
+        // have to index in-order
         for dst_id in 1..routes.len() + 1 {
-            let next_hop_id = routes[&dst_id];
+            // skip self
+            if dst_id == self.id {
+                continue;
+            }
 
-            // the self.route is an id->ix structure
-            let next_hop_ix = self.id_to_ix.get(&next_hop_id).unwrap_or(&0);
-            self.route.push(*next_hop_ix);
+            let next_hop_ids = &routes[&dst_id];
+            let next_hop_ixs = next_hop_ids.iter().map(|x| self.id_to_ix[&x]).collect();
+
+            self.route.push(next_hop_ixs);
         }
     }
 
@@ -208,7 +216,7 @@ pub struct Router {
     out_times: Vec<u64>,
 
     // Route should eventually be turned into a vec
-    route: Vec<usize>,
+    route: Vec<Vec<usize>>,
 
     // stats
     count: u64,
@@ -238,6 +246,7 @@ impl Advancer<u64, u64> for Router {
 
         // main loop :)
         //for event in self.merger {
+        let mut rng = thread_rng();
         while let Some(event) = self.merger.next() {
             /*println!(
                 "Router {} @{}: <{} {:?}",
@@ -268,7 +277,6 @@ impl Advancer<u64, u64> for Router {
                         // equal because they might just need a jog, blocking happens in the
                         // iterator, so no infinite loop risk
                         if *out_time < event.time {
-                            //let cur_time = std::cmp::max(event.time, out_time);
                             self.out_queues[dst_ix]
                                 .push(Event {
                                     event_type: EventType::Null,
@@ -280,19 +288,8 @@ impl Advancer<u64, u64> for Router {
 
                             *out_time = event.time;
                         }
-                        /*println!(
-                            "Router {} @{}: Null({}) >{}",
-                            self.id,
-                            event.time,
-                            event.time + self.latency_ns,
-                            self.ix_to_id[dst_ix]
-                        );*/
                     }
 
-                    // Return, unless we just did
-                    //if event.time > self.last_time {
-                    //self.last_time = event.time;
-                    //}
                     return ActorState::Continue(event.time);
                 }
 
@@ -307,17 +304,16 @@ impl Advancer<u64, u64> for Router {
 
                         NetworkEvent::Packet(packet) => {
                             // Next step
-                            let next_hop_ix = self.route[packet.dst];
+                            let next_hop_ix: usize =
+                                *self.route[packet.dst].choose(&mut rng).unwrap();
 
                             // drop packet if our outgoing queue is full
-                            /*
                             if event.time
-                                > self.out_times[next_hop_ix] + 10 * 1500 * self.ns_per_byte
+                                > self.out_times[next_hop_ix] + 1000 * 1500 * self.ns_per_byte
                             {
-                                println!("Router {} drop {:?}", self.id, packet);
+                                //println!("Router {} drop {:?}", self.id, packet);
                                 continue;
                             }
-                            */
 
                             // when
                             let cur_time = std::cmp::max(event.time, self.out_times[next_hop_ix]);
