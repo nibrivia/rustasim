@@ -97,10 +97,6 @@ pub fn build_network(_n_racks: usize, time_limit: u64, n_cpus: usize) {
     let n_actors = counts.len();
     let n_cpus = std::cmp::min(n_cpus, n_actors);
 
-    // TODO make general
-    // each ToR sends to n_racks-1 racks and n_racks-1 servers
-    // each server (n_racks^2) is connected to 1 ToR
-
     // stats...
     let sum_count = counts.iter().sum::<u64>();
     let ns_per_count: f64 = if sum_count > 0 {

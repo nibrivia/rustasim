@@ -14,15 +14,11 @@
 //! any more progress, and can be called repeatedly. This module can take these "advanceables"
 //! (trait?) and schedule them via crossbeam's work-stealing queue (insert link).
 
-use atomic_counter::{AtomicCounter, RelaxedCounter};
-//use crossbeam_deque::{Steal, Stealer, Worker};
-//use crossbeam_queue::spsc::{Consumer, Producer};
-//use crossbeam_utils::Backoff;
 use crate::FrozenActor;
+use atomic_counter::{AtomicCounter, RelaxedCounter};
+use parking_lot::Mutex;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-//use std::collections::BinaryHeap;
-use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -99,13 +95,11 @@ pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
     }
 }
 
-/*
 #[cfg(test)]
 mod test {
-    use crate::worker::{run, Advancer};
-    use crossbeam_deque::{Injector, Worker};
-    use std::sync::Arc;
+    use crate::worker::*;
 
+    #[derive(Debug)]
     struct DummyAdvance {
         id: usize,
         count: u64,
@@ -126,41 +120,57 @@ mod test {
         }
     }
 
-    impl Advancer for DummyAdvance {
-        fn advance(&mut self) -> bool {
+    impl Advancer<u64, ()> for DummyAdvance {
+        fn advance(&mut self) -> ActorState<u64, ()> {
             self.count += 1;
             println!("{}: {}", self.id, self.count);
 
             // Done
-            return self.count < self.limit;
+            if self.count < self.limit {
+                ActorState::Continue(self.count)
+            } else {
+                ActorState::Done(())
+            }
         }
     }
 
     #[test]
     fn test_advance() {
         let dummy = &mut DummyAdvance::new(0, 3);
-        assert!(dummy.advance());
-        assert!(dummy.advance());
-        assert!(!dummy.advance()); // stops on the 3rd
+        if let ActorState::Continue(_) = dummy.advance() {
+        } else {
+            assert!(false);
+        }
+
+        if let ActorState::Continue(_) = dummy.advance() {
+        } else {
+            assert!(false);
+        }
+
+        if let ActorState::Done(_) = dummy.advance() {
+        } else {
+            assert!(false);
+        }
     }
 
-    #[test]
-    fn test_single_thread() {
-        let local: Worker<Box<dyn Advancer + Send>> = Worker::new_fifo();
-        let global = Injector::new();
-        let stealers = Vec::new();
+    /*
+        #[test]
+        fn test_single_thread() {
+            let local: Worker<Box<dyn Advancer + Send>> = Worker::new_fifo();
+            let global = Injector::new();
+            let stealers = Vec::new();
 
-        let advancer = Box::new(DummyAdvance::new(1, 3));
-        local.push(advancer);
+            let advancer = Box::new(DummyAdvance::new(1, 3));
+            local.push(advancer);
 
-        let advancer = Box::new(DummyAdvance::new(2, 5));
-        local.push(advancer);
+            let advancer = Box::new(DummyAdvance::new(2, 5));
+            local.push(advancer);
 
-        //let thread_worker = ThreadWorker::new(local, global, stealers);
-        run(&local, Arc::new(global), &stealers);
+            //let thread_worker = ThreadWorker::new(local, global, stealers);
+            run(&local, Arc::new(global), &stealers);
 
-        // TODO find auto testing
-        assert!(true);
-    }
+            // TODO find auto testing
+            assert!(true);
+        }
+    */
 }
-*/
