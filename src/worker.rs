@@ -19,9 +19,14 @@ use atomic_counter::{AtomicCounter, RelaxedCounter};
 //use crossbeam_queue::spsc::{Consumer, Producer};
 //use crossbeam_utils::Backoff;
 use crate::FrozenActor;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 use std::collections::BinaryHeap;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
+
+/// Convenience wrapper for a reference counted, distributed heap of frozen actors...
+pub type LockedTaskHeap<T, R> = Arc<Mutex<BinaryHeap<FrozenActor<T, R>>>>;
 
 /// Return value for actors to use to signal their state to the workers
 #[derive(Debug)]
@@ -57,27 +62,30 @@ pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
     id: usize,
     counter: Arc<RelaxedCounter>,
     n_tasks: usize,
-    task_heap: Arc<Mutex<BinaryHeap<FrozenActor<T, R>>>>,
+    task_heap: Vec<LockedTaskHeap<T, R>>,
 ) -> Vec<R> {
     println!("{} start", id);
     let mut counts = Vec::new();
 
+    // rng
+    let mut rng = thread_rng();
+
     // initial task
-    let mut task = task_heap.lock().unwrap().pop();
+    let mut task = task_heap.choose(&mut rng).unwrap().lock().unwrap().pop();
     loop {
         if let Some(mut frozen_actor) = task {
             //println!("{} task start", id);
             match frozen_actor.actor.advance() {
                 ActorState::Continue(time) => {
                     frozen_actor.time = time;
-                    let mut heap = task_heap.lock().unwrap();
+                    let mut heap = task_heap.choose(&mut rng).unwrap().lock().unwrap();
                     heap.push(frozen_actor);
                     task = heap.pop();
                 }
                 ActorState::Done(count) => {
                     counts.push(count);
                     counter.inc();
-                    task = task_heap.lock().unwrap().pop();
+                    task = task_heap.choose(&mut rng).unwrap().lock().unwrap().pop();
                 }
             }
         //println!("{} task done", id);
@@ -85,7 +93,7 @@ pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
             println!("{} finished", id);
             return counts;
         } else {
-            task = task_heap.lock().unwrap().pop();
+            task = task_heap.choose(&mut rng).unwrap().lock().unwrap().pop();
         }
     }
 }

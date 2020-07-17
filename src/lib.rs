@@ -9,7 +9,7 @@
 
 use atomic_counter::RelaxedCounter;
 //use crossbeam_deque::Worker;
-use crate::worker::{run, Advancer};
+use crate::worker::{run, Advancer, LockedTaskHeap};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fmt::Debug;
@@ -69,27 +69,35 @@ impl<T, R> Eq for FrozenActor<T, R> where T: Ord + Copy + num::Zero {}
 // TODO check if we can remove dynamic dispatch in simple cases
 pub fn start<T: 'static + Ord + Copy + Debug + Send + num::Zero, R: 'static + Send + Copy>(
     num_cpus: usize,
-    actors: Vec<Box<dyn Advancer<T, R> + Send>>,
+    mut actors: Vec<Box<dyn Advancer<T, R> + Send>>,
 ) -> Vec<R> {
     // Start the workers
     let mut handles = Vec::new();
     let n_actors = actors.len();
     let shared_counter = Arc::new(RelaxedCounter::new(0));
-    let task_heap = Arc::new(Mutex::new(BinaryHeap::new()));
 
-    for actor in actors {
+    // Initialize the heaps
+    let n_heaps = 4;
+    let mut heaps = Vec::new();
+    for _ in 0..n_heaps {
+        let task_heap: LockedTaskHeap<T, R> = Arc::new(Mutex::new(BinaryHeap::new()));
+        heaps.push(task_heap);
+    }
+
+    for (i, actor) in actors.drain(..).enumerate() {
+        let heap_ix = i % n_heaps;
         let frozen = FrozenActor {
             time: T::zero(),
-            actor,
+            actor: actor,
         };
-        task_heap.lock().unwrap().push(frozen);
+        heaps[heap_ix].lock().unwrap().push(frozen);
     }
     for i in 0..num_cpus {
         // start this worker
         handles.push({
-            let heap_clone = Arc::clone(&task_heap);
+            let cloned_heaps = heaps.iter().map(|x| Arc::clone(&x)).collect();
             let counter_clone = Arc::clone(&shared_counter);
-            thread::spawn(move || run(i, counter_clone, n_actors, heap_clone))
+            thread::spawn(move || run(i, counter_clone, n_actors, cloned_heaps))
         });
     }
 
