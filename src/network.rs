@@ -85,7 +85,7 @@ pub fn build_network(n_racks: usize, time_limit: u64, n_cpus: usize) {
 
     println!("Setup...");
     //let (net, n_hosts) = routing::build_fc(5, 4);
-    let (net, n_hosts) = routing::build_clos(2, 6);
+    let (net, n_hosts) = routing::build_clos(3, 9);
     let world = World::new_from_network(net, n_hosts);
 
     println!("Run...");
