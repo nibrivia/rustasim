@@ -12,9 +12,10 @@ use atomic_counter::RelaxedCounter;
 use crate::worker::{run, Advancer, LockedTaskHeap};
 use std::cmp::Ordering;
 //use std::collections::BinaryHeap;
+use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
 
 //use slog::*;
@@ -77,7 +78,7 @@ pub fn start<T: 'static + Ord + Copy + Debug + Send + num::Zero, R: 'static + Se
     let shared_counter = Arc::new(RelaxedCounter::new(0));
 
     // Initialize the heaps
-    let n_heaps = 32;
+    let n_heaps = 8;
     let mut heaps = Vec::new();
     for _ in 0..n_heaps {
         let task_heap: LockedTaskHeap<T, R> = Arc::new(Mutex::new(VecDeque::new()));
@@ -90,7 +91,7 @@ pub fn start<T: 'static + Ord + Copy + Debug + Send + num::Zero, R: 'static + Se
             time: T::zero(),
             actor,
         };
-        heaps[heap_ix].lock().unwrap().push_back(frozen);
+        heaps[heap_ix].lock().push_back(frozen);
     }
 
     let mut handles = Vec::new();

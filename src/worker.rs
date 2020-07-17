@@ -22,9 +22,10 @@ use crate::FrozenActor;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 //use std::collections::BinaryHeap;
+use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 /// Convenience wrapper for a reference counted, distributed heap of frozen actors...
 pub type LockedTaskHeap<T, R> = Arc<Mutex<VecDeque<FrozenActor<T, R>>>>;
@@ -76,14 +77,14 @@ pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
         .choose(&mut rng)
         .unwrap()
         .lock()
-        .unwrap()
+        //.unwrap()
         .pop_front();
     loop {
         if let Some(mut frozen_actor) = task {
             match frozen_actor.actor.advance() {
                 ActorState::Continue(time) => {
                     frozen_actor.time = time;
-                    let mut heap = task_heap.choose(&mut rng).unwrap().lock().unwrap();
+                    let mut heap = task_heap.choose(&mut rng).unwrap().lock();
                     heap.push_back(frozen_actor);
                     task = heap.pop_front();
                 }
@@ -94,7 +95,7 @@ pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
                         .choose(&mut rng)
                         .unwrap()
                         .lock()
-                        .unwrap()
+                        //.unwrap()
                         .pop_front();
                 }
             }
@@ -107,7 +108,7 @@ pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
                 .choose(&mut rng)
                 .unwrap()
                 .lock()
-                .unwrap()
+                //.unwrap()
                 .pop_front();
         }
     }
