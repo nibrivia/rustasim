@@ -8,14 +8,14 @@ readme = "README.md"
 repository = "https://github.com/nibrivia/rustasim"
 
 [dependencies]
+atomic-counter = "1.0.1"
 crossbeam-utils = "0.7"
 csv = "1.1"
-atomic-counter = "1.0.1"
+num = "0.3"
+num_cpus = "1.13.0"
 parking_lot = "0.11.0"
 rand = "0.7.3"
 rand_distr = "0.2.2"
-num = "0.3"
-num_cpus = "1.13.0"
 
 [dependencies.slog]
 version = "2.5.2"
