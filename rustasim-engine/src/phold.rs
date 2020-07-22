@@ -1,4 +1,4 @@
-//! Datacenter network model
+//! PHOLD model
 
 use crate::spsc;
 use crate::spsc::{Consumer, Producer};

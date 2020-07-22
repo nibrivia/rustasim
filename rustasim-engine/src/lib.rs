@@ -8,11 +8,8 @@
 //! the type of model being run, and should probably eventually be pulled out into its own crate.
 
 use atomic_counter::RelaxedCounter;
-//use crossbeam_deque::Worker;
-//use crate::worker::{run, Advancer, LockedTaskHeap};
-use std::cmp::Ordering;
-//use std::collections::BinaryHeap;
 use parking_lot::Mutex;
+use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::sync::Arc;
