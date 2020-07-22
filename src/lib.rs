@@ -23,7 +23,6 @@ use std::thread;
 
 pub mod engine;
 pub mod err;
-pub mod network;
 pub mod phold;
 pub mod spsc;
 pub mod worker;
