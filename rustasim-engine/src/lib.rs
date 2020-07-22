@@ -4,12 +4,12 @@
 //! Parallel datacenter network simulator
 //!
 //! Throughout this crate there is a user-backend relationship between the [simulation
-//! engine](synchronizer/index.html) and the model. In general, the engine should be agnostic to
+//! engine](engine/index.html) and the model. In general, the engine should be agnostic to
 //! the type of model being run, and should probably eventually be pulled out into its own crate.
 
 use atomic_counter::RelaxedCounter;
 //use crossbeam_deque::Worker;
-use crate::worker::{run, Advancer, LockedTaskHeap};
+//use crate::worker::{run, Advancer, LockedTaskHeap};
 use std::cmp::Ordering;
 //use std::collections::BinaryHeap;
 use parking_lot::Mutex;
@@ -21,13 +21,16 @@ use std::thread;
 //use slog::*;
 //use slog_async;
 
-pub mod engine;
-pub mod err;
-pub mod phold;
+mod engine;
+mod err;
 pub mod spsc;
-pub mod worker;
+mod worker;
 
+pub mod phold;
+
+pub use self::engine::{Event, EventType, Merger};
 pub use self::err::{PopError, PushError};
+pub use self::worker::{run, ActorState, Advancer, LockedTaskHeap};
 
 /// Maintains the state of the actor while it's at rest
 #[derive(Debug)]
