@@ -1,5 +1,4 @@
-use rustasim_dcsim;
-//use rustasim::phold;
+use rustasim_dcsim::build_network;
 
 fn main() {
     let n_cpus = num_cpus::get() - 1;
@@ -10,7 +9,7 @@ fn main() {
     #[allow(clippy::zero_prefixed_literal)]
     let time_limit: u64 = 000_051_111_000;
     let n_racks = 5;
-    if let Err(e) = rustasim_dcsim::build_network(n_racks, time_limit, n_cpus) {
+    if let Err(e) = build_network(n_racks, time_limit, n_cpus) {
         println!("Error: {}", e);
         std::process::exit(1);
     }
