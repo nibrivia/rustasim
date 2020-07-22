@@ -1,0 +1,23 @@
+[package]
+name = "rustasim"
+description = "Distributed event-driven simulator with a focus on datacenter networks"
+version = "0.0.99"
+authors = ["Olivia Brode-Roger <nibr@mit.edu>"]
+edition = "2018"
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/nibrivia/rustasim"
+
+[dependencies]
+atomic-counter = "1.0.1"
+crossbeam-utils = "0.7"
+csv = "1.1"
+num = "0.3"
+num_cpus = "1.13.0"
+parking_lot = "0.11.0"
+rand = "0.7.3"
+rand_distr = "0.2.2"
+
+[dependencies.slog]
+version = "2.5.2"
+features = ["max_level_trace", "release_max_level_error"]
