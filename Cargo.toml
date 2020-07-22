@@ -5,7 +5,7 @@ version = "0.0.99"
 authors = ["Olivia Brode-Roger <nibr@mit.edu>"]
 edition = "2018"
 readme = "README.md"
-license = "LICENSE"
+license = "MIT"
 repository = "https://github.com/nibrivia/rustasim"
 
 [dependencies]
