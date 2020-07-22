@@ -1,13 +1,13 @@
 //! PHOLD model
 
-use crate::spsc;
-use crate::spsc::{Consumer, Producer};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+
 use rand::distributions::{Distribution, Uniform};
 use rand_distr::Exp;
+use rustasim::spsc;
+use rustasim::spsc::{Consumer, Producer};
+use rustasim::{ActorState, Advancer, Event, EventType, Merger};
 use std::time::Instant;
-
-use crate::engine::*;
-use crate::worker::{ActorState, Advancer};
 
 type Time = u64;
 type Res = u64;
@@ -19,7 +19,7 @@ const LOOKAHEAD: Time = 1 as Time * T_MULT;
 /// Generic event
 type PHOLDEvent = ();
 
-type FullEvent = crate::engine::Event<Time, PHOLDEvent>;
+type FullEvent = rustasim::Event<Time, PHOLDEvent>;
 
 /// PHOLD actor
 #[derive(Debug)]
@@ -166,7 +166,7 @@ impl Advancer<Time, Res> for Actor {
 /// let expected = vec![vec![1, 4], vec![2, 5], vec![3, 6]];
 /// assert_eq!(t, expected);
 /// ```
-pub fn transpose<T>(in_vector: Vec<Vec<T>>) -> Vec<Vec<T>> {
+fn transpose<T>(in_vector: Vec<Vec<T>>) -> Vec<Vec<T>> {
     let mut result: Vec<Vec<T>> = Vec::new();
 
     // initialize the columns
@@ -184,7 +184,7 @@ pub fn transpose<T>(in_vector: Vec<Vec<T>>) -> Vec<Vec<T>> {
 }
 
 /// Builds and runs a PHOLD model as described by the passed arguments
-pub fn run(n_actors: usize, mut time_limit: Time, n_threads: usize) {
+fn run(n_actors: usize, mut time_limit: Time, n_threads: usize) {
     time_limit *= T_MULT;
     println!("Setup...");
 
@@ -224,7 +224,7 @@ pub fn run(n_actors: usize, mut time_limit: Time, n_threads: usize) {
 
     println!("Run...");
     let start = Instant::now();
-    let counts = crate::start(num_cpus::get() - 1, actors);
+    let counts = rustasim::start(num_cpus::get() - 1, actors);
     let duration = start.elapsed();
 
     // stats...
@@ -257,3 +257,12 @@ pub fn run(n_actors: usize, mut time_limit: Time, n_threads: usize) {
 
     println!("done");
 }
+
+fn criterion_benchmark(c: &mut Criterion) {
+    let n_cpus = num_cpus::get() - 1;
+    println!("hey?");
+    c.bench_function("fib 20", |b| b.iter(|| run(7 * 8 * 4, 0_000_100, n_cpus)));
+}
+
+criterion_group!(benches, criterion_benchmark);
+criterion_main!(benches);

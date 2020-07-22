@@ -23,8 +23,6 @@ mod err;
 pub mod spsc;
 mod worker;
 
-pub mod phold;
-
 pub use self::engine::{Event, EventType, Merger};
 pub use self::err::{PopError, PushError};
 pub use self::worker::{run, ActorState, Advancer, LockedTaskHeap};

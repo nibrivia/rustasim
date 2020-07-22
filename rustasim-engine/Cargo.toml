@@ -18,6 +18,13 @@ parking_lot = "0.11.0"
 rand = "0.7.3"
 rand_distr = "0.2.2"
 
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "phold"
+harness = false
+
 [dependencies.slog]
 version = "2.5.2"
 features = ["max_level_trace", "release_max_level_error"]
