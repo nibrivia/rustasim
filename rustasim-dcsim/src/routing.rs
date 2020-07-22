@@ -19,7 +19,7 @@ pub type Network = HashMap<usize, Vec<usize>>;
 /// # Examples
 /// ```
 /// use std::collections::HashMap;
-/// use rustasim_models::route_id;
+/// use rustasim_dcsim::route_id;
 ///
 /// // +-------+
 /// // |       |
@@ -90,7 +90,7 @@ pub fn route_id(network: &Network, source_id: usize) -> HashMap<usize, usize> {
 ///
 /// ```
 /// use std::collections::HashMap;
-/// use rustasim_models::route_all;
+/// use rustasim_dcsim::route_all;
 ///
 /// // +-- 5 --+
 /// // |       |
@@ -230,7 +230,7 @@ pub fn build_fc(n_racks: usize, hosts_per_rack: usize) -> (Network, usize) {
 ///
 /// # Examples
 /// ```
-/// use rustasim_models::build_clos;
+/// use rustasim_dcsim::build_clos;
 ///
 /// let (net, n_hosts) = build_clos(1, 3);
 /// assert_eq!(n_hosts, 24);

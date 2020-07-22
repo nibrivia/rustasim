@@ -342,7 +342,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustasim-models"
+name = "rustasim-dcsim"
 version = "0.1.0"
 dependencies = [
  "csv",
