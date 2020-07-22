@@ -1,5 +1,7 @@
 //! A bounded single-producer single-consumer queue.
 //!
+//! Lifted from an [unpublished branch of crossbeam](https://github.com/stjepang/crossbeam/tree/spsc/crossbeam-queue/src)
+//!
 //! # Examples
 //!
 //! ```
