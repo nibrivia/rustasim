@@ -1,7 +1,7 @@
 //! Server module
 
-use crossbeam_queue::spsc;
-use crossbeam_queue::spsc::*;
+use crate::spsc;
+use crate::spsc::*;
 use std::collections::HashMap;
 
 use crate::engine::*;

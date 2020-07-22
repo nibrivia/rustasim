@@ -1,7 +1,7 @@
 //! Router module, takes care of ToRs and backbone switches
 
-use crossbeam_queue::spsc;
-use crossbeam_queue::spsc::*;
+use crate::spsc;
+use crate::spsc::*;
 use std::collections::HashMap;
 //use std::thread;
 

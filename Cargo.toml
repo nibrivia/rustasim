@@ -8,7 +8,6 @@ readme = "README.md"
 repository = "https://github.com/nibrivia/rustasim"
 
 [dependencies]
-crossbeam-queue = { git = "https://github.com/nibrivia/crossbeam.git" , branch = "wait" }
 crossbeam-utils = "0.7"
 csv = "1.1"
 atomic-counter = "1.0.1"

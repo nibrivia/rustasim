@@ -1,7 +1,7 @@
 //! Datacenter network model
 
-use crossbeam_queue::spsc;
-use crossbeam_queue::spsc::{Consumer, Producer};
+use crate::spsc;
+use crate::spsc::{Consumer, Producer};
 use rand::distributions::{Distribution, Uniform};
 use rand_distr::Exp;
 use std::time::Instant;

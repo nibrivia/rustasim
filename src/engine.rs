@@ -16,7 +16,7 @@
 //!
 // TODO description of when the null-message should be sent and what it should look like
 
-use crossbeam_queue::spsc;
+use crate::spsc;
 use std::cmp::Ordering;
 use std::mem;
 
@@ -372,7 +372,7 @@ where
 #[cfg(test)]
 mod test_merger {
     use crate::engine::*;
-    use crossbeam_queue::spsc;
+    use crate::spsc;
     use std::{thread, time};
 
     #[derive(Debug)]

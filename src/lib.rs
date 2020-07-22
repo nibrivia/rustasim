@@ -22,9 +22,13 @@ use std::thread;
 //use slog_async;
 
 pub mod engine;
+pub mod err;
 pub mod network;
 pub mod phold;
+pub mod spsc;
 pub mod worker;
+
+pub use self::err::{PopError, PushError};
 
 /// Maintains the state of the actor while it's at rest
 #[derive(Debug)]
