@@ -3,10 +3,9 @@
 use crate::network::{Connectable, Device, ModelEvent, NetworkEvent, Q_SIZE};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use rustasim::engine::*;
 use rustasim::spsc;
 use rustasim::spsc::*;
-use rustasim::worker::{ActorState, Advancer};
+use rustasim::{ActorState, Advancer, Event, EventType, Merger};
 use std::collections::HashMap;
 
 /// Top of rack switch builder

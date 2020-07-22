@@ -1,11 +1,10 @@
 //! Server module
 
-use crate::network::tcp;
 use crate::network::{Connectable, Device, ModelEvent, NetworkEvent, Q_SIZE};
-use rustasim::engine::*;
+use crate::tcp;
 use rustasim::spsc;
 use rustasim::spsc::*;
-use rustasim::worker::{ActorState, Advancer};
+use rustasim::{ActorState, Advancer, Event, EventType, Merger};
 use std::collections::HashMap;
 
 /// A ServerBuilder is used to create a Server

@@ -1,32 +1,25 @@
 //! Datacenter network model
 
-use crate::network::router::{Router, RouterBuilder};
-use crate::network::routing::{route_all, Network};
-use crate::network::server::{Server, ServerBuilder};
-use crate::network::tcp::*;
+use crate::router::{Router, RouterBuilder};
+use crate::routing::{build_clos, route_all, Network};
+use crate::server::{Server, ServerBuilder};
+use crate::tcp::{Flow, Packet};
 use csv::ReaderBuilder;
-use rustasim::engine::*;
 use rustasim::spsc::Producer;
-use rustasim::start;
-use rustasim::worker::Advancer;
+use rustasim::{start, Advancer, Event, EventType};
 use std::collections::HashMap;
 use std::error::Error;
 use std::time::Instant;
 
-mod router;
-pub mod routing;
-mod server;
-mod tcp;
-
-const Q_SIZE: usize = 1 << 14;
+pub const Q_SIZE: usize = 1 << 14;
 
 /// Datacenter network model events
 pub enum NetworkEvent {
     /// Flow start
-    Flow(tcp::Flow),
+    Flow(Flow),
 
     /// Packet arrival
-    Packet(tcp::Packet),
+    Packet(Packet),
 }
 
 impl std::fmt::Debug for NetworkEvent {
@@ -44,7 +37,7 @@ impl std::fmt::Debug for NetworkEvent {
     }
 }
 
-type ModelEvent = rustasim::engine::Event<u64, NetworkEvent>;
+pub type ModelEvent = Event<u64, NetworkEvent>;
 
 /// Device types
 #[derive(Debug)]
@@ -91,7 +84,7 @@ pub fn build_network(
 
     println!("Setup...");
     //let (net, n_hosts) = routing::build_fc(5, 4);
-    let (net, n_hosts) = routing::build_clos(3, 9);
+    let (net, n_hosts) = build_clos(3, 9);
     let n_links: u64 = (&net).iter().map(|(_, v)| v.len() as u64).sum();
     let mut world = World::new_from_network(net, n_hosts);
 

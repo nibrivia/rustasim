@@ -19,7 +19,7 @@ pub type Network = HashMap<usize, Vec<usize>>;
 /// # Examples
 /// ```
 /// use std::collections::HashMap;
-/// use rustasim::network::routing::route_id;
+/// use rustasim_models::route_id;
 ///
 /// // +-------+
 /// // |       |
@@ -90,7 +90,7 @@ pub fn route_id(network: &Network, source_id: usize) -> HashMap<usize, usize> {
 ///
 /// ```
 /// use std::collections::HashMap;
-/// use rustasim::network::routing::route_all;
+/// use rustasim_models::route_all;
 ///
 /// // +-- 5 --+
 /// // |       |
@@ -230,7 +230,7 @@ pub fn build_fc(n_racks: usize, hosts_per_rack: usize) -> (Network, usize) {
 ///
 /// # Examples
 /// ```
-/// use rustasim::network::routing::build_clos;
+/// use rustasim_models::build_clos;
 ///
 /// let (net, n_hosts) = build_clos(1, 3);
 /// assert_eq!(n_hosts, 24);
@@ -294,7 +294,7 @@ pub fn build_clos(u: usize, d: usize) -> (Network, usize) {
 
 #[cfg(test)]
 mod test {
-    use crate::network::routing::*;
+    use crate::{build_clos, build_fc, route_all, route_id, Network};
     use std::collections::HashMap;
 
     /// Just to check all network are bi-direectional
