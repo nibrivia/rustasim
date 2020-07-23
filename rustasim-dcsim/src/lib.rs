@@ -1,7 +1,6 @@
 //! Datacenter network model
 
 // I like to have many small files
-mod network;
 mod router;
 mod routing;
 mod server;
