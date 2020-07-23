@@ -1,3 +1,4 @@
+#![deny(missing_docs)]
 //! Datacenter network model
 
 // I like to have many small files
@@ -24,7 +25,41 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::time::Instant;
 
-pub const Q_SIZE: usize = 1 << 14;
+/// Size for the internal event queue
+const Q_SIZE: usize = 1 << 14;
+
+/// Convenience alias for time type
+pub type Time = u64;
+
+/// Convenience alias for the simulation result
+pub type ActorResult = u64;
+
+/// Shorthand for the event types
+pub type ModelEvent = Event<Time, NetworkEvent>;
+
+/// Simulation parameters
+pub struct SimConfig {
+    /// Simulation end, in ns
+    pub time_limit: Time,
+
+    /// Datacenter topology type
+    pub topology: Topology,
+
+    /// Flow file
+    pub flow_file: String,
+}
+
+/// Topology types
+pub enum Topology {
+    /// 3 tiered CLOS(u, d) with `u` uplinks and `d` downlinks
+    CLOS(usize, usize),
+
+    /// FullyConnected(n) All `n` racks are connected to all other racks, `n-1` servers/rack
+    FullyConnected(usize),
+    //Expander(u64),
+    //Rotor,
+    //Opera,
+}
 
 /// Datacenter network model events
 pub enum NetworkEvent {
@@ -49,8 +84,6 @@ impl std::fmt::Debug for NetworkEvent {
         })
     }
 }
-
-pub type ModelEvent = Event<u64, NetworkEvent>;
 
 /// Device types
 #[derive(Debug)]
@@ -83,22 +116,15 @@ pub trait Connectable {
     ) -> Producer<ModelEvent>;
 }
 
-/// Builds and runs a network with the given parameters
-///
-/// TODO more...
-pub fn build_network(
-    _n_racks: usize,
-    time_limit: u64,
-    n_cpus: usize,
-) -> Result<(), Box<dyn Error>> {
-    // TODO pass in time_limit, n_threads as arguments
-
-    //let time_limit: u64 = 1_000_000_000;
-
+/// Takes care of properly building the simulation object, running it, and reporting to the user
+pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>> {
     println!("Setup...");
-    //let (net, n_hosts) = routing::build_fc(5, 4);
-    let (net, n_hosts) = build_clos(3, 9);
+    let (net, n_hosts) = match config.topology {
+        Topology::CLOS(u, d) => build_clos(u, d),
+        Topology::FullyConnected(k) => build_fc(k, k - 1),
+    };
     let n_links: u64 = (&net).iter().map(|(_, v)| v.len() as u64).sum();
+
     let mut world = World::new_from_network(net, n_hosts);
 
     // Flows
@@ -118,7 +144,7 @@ pub fn build_network(
         let size_byte = line[2].parse::<u64>()?;
         let time = line[3].parse::<u64>()?;
 
-        if time > time_limit {
+        if time > config.time_limit {
             break;
         }
 
@@ -143,14 +169,14 @@ pub fn build_network(
 
     println!("Run...");
     let start = Instant::now();
-    let counts = world.start(n_cpus, time_limit);
+    let counts = world.start(n_cpus, config.time_limit);
     let duration = start.elapsed();
 
     let n_actors = counts.len();
     let n_cpus = std::cmp::min(n_cpus, n_actors);
 
     // stats...
-    let sum_count = counts.iter().sum::<u64>();
+    let sum_count = counts.iter().sum::<ActorResult>();
     let ns_per_count: f64 = if sum_count > 0 {
         1000. * duration.as_nanos() as f64 / sum_count as f64
     } else {
@@ -159,14 +185,15 @@ pub fn build_network(
 
     // each link is 8Gbps, time_limit/1e9 is in seconds which is how much we simulated
     // divide by the time it took us -> simulation bandwidth
-    let gbps = (n_links * 8 * time_limit) as f64 / 1e9 / duration.as_secs_f64();
+    let gbps = (n_links * 8 * config.time_limit) as f64 / 1e9 / duration.as_secs_f64();
 
     println!(
-        "= {} in {:.3}s. {} actors, {} hosts, {} cores",
+        "= {} in {:.3}s. {} actors ({} hosts) for {:.3}s on {} cores",
         sum_count,
         duration.as_secs_f32(),
         n_actors,
         n_hosts,
+        config.time_limit as f64 / 1e9,
         n_cpus,
     );
     println!(
@@ -207,7 +234,7 @@ struct World {
 /// This is where the core of the simualtion setup should happen. Notably it has the important
 /// tasks of connection actors together, and to give "external" events to these actors.
 ///
-/// Setthing up and running the simulation are done in two phases. This feels like good design, but
+/// Setting up and running the simulation are done in two phases. This feels like good design, but
 /// it is not clear to me why.
 impl World {
     pub fn new_from_network(network: Network, n_hosts: usize) -> World {
@@ -269,90 +296,6 @@ impl World {
         World {
             servers,
             routers,
-            chans,
-        }
-    }
-
-    /// Sets up a world ready for simulation
-    pub fn _new(n_racks: usize) -> World {
-        // TODO pass as argument
-        let servers_per_rack = n_racks - 1;
-
-        // Use to keep track of ID numbers and make them continuous
-        let mut next_id = 1;
-        let mut network = Network::new(); // for routing
-
-        // Racks -----------------------------------------------
-        let mut rack_builders: Vec<RouterBuilder> = Vec::new();
-
-        for _ in 0..n_racks {
-            let mut r = RouterBuilder::new(next_id);
-            network.insert(next_id, vec![]);
-
-            // connect up with other racks
-            for rack2 in rack_builders.iter_mut() {
-                // update our network matrix
-                network.get_mut(&next_id).unwrap().push(rack2.id());
-                network.get_mut(&rack2.id()).unwrap().push(next_id);
-
-                // connect the devices
-                (&mut r).connect(rack2);
-            }
-
-            next_id += 1;
-            rack_builders.push(r);
-        }
-
-        // Servers ---------------------------------------------
-        let mut server_builders = Vec::new();
-
-        for rack_ix in 0..n_racks {
-            for _ in 0..servers_per_rack {
-                let mut s = ServerBuilder::new(next_id);
-                network.insert(next_id, vec![]);
-
-                // get the parent rack (needs to be done each time, ref is consumed by connect)
-                let rack = rack_builders.get_mut(rack_ix).unwrap();
-
-                // update network matrix
-                network.get_mut(&next_id).unwrap().push(rack.id());
-                network.get_mut(&rack.id()).unwrap().push(next_id);
-
-                // connect devices
-                (&mut s).connect(rack);
-
-                // push and consume
-                next_id += 1;
-                server_builders.push(s);
-            }
-        }
-
-        // Routing ---------------------------------------------
-        for r in rack_builders.iter_mut() {
-            let rack_id = r.id();
-
-            let routes = route_all(&network, rack_id);
-            r.install_routes(routes);
-        }
-
-        // World -----------------------------------------------
-        let mut chans = HashMap::new();
-        let mut servers = vec![];
-        for mut b in server_builders {
-            chans.insert(b.id, b.connect_world());
-            servers.push(b.build());
-        }
-
-        let mut routers = vec![];
-        for mut rb in rack_builders {
-            chans.insert(rb.id, rb.connect_world());
-            routers.push(rb.build());
-        }
-
-        // return world
-        World {
-            routers,
-            servers,
             chans,
         }
     }
