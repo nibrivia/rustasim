@@ -1,7 +1,7 @@
 //! Server module
 
 use crate::tcp;
-use crate::{Connectable, ModelEvent, NetworkEvent, Q_SIZE};
+use crate::{tx_rx_time, Connectable, ModelEvent, NetworkEvent, Time, Q_SIZE};
 use rustasim::spsc;
 use rustasim::spsc::*;
 use rustasim::{ActorState, Advancer, Event, EventType, Merger};
@@ -16,8 +16,8 @@ pub struct ServerBuilder {
     /// Future ID of the server
     pub id: usize,
 
-    ns_per_byte: u64,
-    latency_ns: u64,
+    bandwidth_gbps: u64,
+    latency_ns: Time,
 
     id_to_ix: HashMap<usize, usize>,
     ix_to_id: Vec<usize>,
@@ -88,7 +88,7 @@ impl ServerBuilder {
         ServerBuilder {
             id,
 
-            ns_per_byte: 1,
+            bandwidth_gbps: 10,
             latency_ns: 500,
 
             id_to_ix,
@@ -98,6 +98,17 @@ impl ServerBuilder {
             in_queues,
             out_queues,
         }
+    }
+
+    /// Define server's outgoing bandwidth
+    pub fn bandwidth_gbps(mut self, bandwidth_gbps: Time) -> ServerBuilder {
+        self.bandwidth_gbps = bandwidth_gbps;
+        self
+    }
+    /// Define server's outgoing latency
+    pub fn latency_ns(mut self, latency: Time) -> ServerBuilder {
+        self.latency_ns = latency;
+        self
     }
 
     /// Establishes a connection to the "World", see documentation for World
@@ -143,7 +154,7 @@ impl ServerBuilder {
         Server {
             id: self.id,
 
-            ns_per_byte: self.ns_per_byte,
+            bandwidth_gbps: self.bandwidth_gbps,
             latency_ns: self.latency_ns,
 
             out_queues: self.out_queues,
@@ -170,7 +181,7 @@ pub struct Server {
     /// Unique ID for the server
     pub id: usize,
 
-    ns_per_byte: u64,
+    bandwidth_gbps: u64,
     latency_ns: u64,
 
     merger: Merger<u64, NetworkEvent>,
@@ -302,8 +313,12 @@ impl Advancer<u64, u64> for Server {
                                 packet.is_ack = true;
                                 packet.size_byte = 10;
 
-                                let tx_end = self.tor_time + self.ns_per_byte * packet.size_byte;
-                                let rx_end = tx_end + self.latency_ns;
+                                let (tx_end, rx_end) = tx_rx_time(
+                                    self.tor_time,
+                                    packet.size_byte,
+                                    self.latency_ns,
+                                    self.bandwidth_gbps,
+                                );
 
                                 tor_q
                                     .push(Event {
@@ -324,7 +339,13 @@ impl Advancer<u64, u64> for Server {
                     // send the packets
                     let mut tx_end = self.tor_time;
                     for p in packets {
-                        tx_end += self.ns_per_byte * p.size_byte;
+                        /*let (tx_end, rx_end) = tx_rx_time(
+                            self.tor_time,
+                            p.size_byte,
+                            self.latency_ns,
+                            self.bandwidth_gbps,
+                        );*/
+                        tx_end += self.bandwidth_gbps * p.size_byte * 8;
                         let rx_end = tx_end + self.latency_ns;
 
                         let event = Event {

@@ -12,6 +12,10 @@ fn main() {
         time_limit,
         topology: Topology::CLOS(3, 9),
         flow_file: "/home/nibr/opera-sim/Figure7_datamining/3to1_clos/traffic_gen/flows_25percLoad_10sec_648hosts_3to1.htsim".to_string(),
+
+        bandwidth_gbps: 10,
+
+        latency_ns: 500,
     };
 
     let n_cpus = num_cpus::get() - 1;

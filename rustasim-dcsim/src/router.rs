@@ -1,6 +1,6 @@
 //! Router module, takes care of ToRs and backbone switches
 
-use crate::{Connectable, ModelEvent, NetworkEvent, Q_SIZE};
+use crate::{Connectable, ModelEvent, NetworkEvent, Time, Q_SIZE};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use rustasim::spsc;
@@ -19,7 +19,7 @@ pub struct RouterBuilder {
 
     // fundamental properties
     latency_ns: u64,
-    ns_per_byte: u64,
+    bandwidth_gbps: u64,
 
     // internal mappings
     id_to_ix: HashMap<usize, usize>,
@@ -82,7 +82,7 @@ impl RouterBuilder {
         RouterBuilder {
             id,
             latency_ns: 500,
-            ns_per_byte: 1,
+            bandwidth_gbps: 1,
 
             id_to_ix: HashMap::new(),
             ix_to_id: Vec::new(),
@@ -105,6 +105,17 @@ impl RouterBuilder {
         self.ix_to_id.push(0);
 
         prod
+    }
+
+    /// Define router's outgoing bandwidth
+    pub fn bandwidth_gbps(mut self, bandwidth_gbps: Time) -> RouterBuilder {
+        self.bandwidth_gbps = bandwidth_gbps;
+        self
+    }
+    /// Define router's outgoing latency
+    pub fn latency_ns(mut self, latency: Time) -> RouterBuilder {
+        self.latency_ns = latency;
+        self
     }
 
     /// Installs an externally computed routing table
@@ -164,7 +175,7 @@ impl RouterBuilder {
             id: self.id,
 
             latency_ns: self.latency_ns,
-            ns_per_byte: self.ns_per_byte,
+            bandwidth_gbps: self.bandwidth_gbps,
 
             merger,
 
@@ -195,7 +206,7 @@ pub struct Router {
 
     // fundamental properties
     latency_ns: u64,
-    ns_per_byte: u64,
+    bandwidth_gbps: u64,
 
     ix_to_id: Vec<usize>,
 
@@ -299,7 +310,8 @@ impl Advancer<u64, u64> for Router {
 
                             // drop packet if our outgoing queue is full
                             if event.time
-                                > self.out_times[next_hop_ix] + 1000 * 1500 * self.ns_per_byte
+                                > self.out_times[next_hop_ix]
+                                    + 1000 * 8 * 1500 * self.bandwidth_gbps
                             {
                                 //println!("Router {} drop {:?}", self.id, packet);
                                 continue;
@@ -307,7 +319,7 @@ impl Advancer<u64, u64> for Router {
 
                             // when
                             let cur_time = std::cmp::max(event.time, self.out_times[next_hop_ix]);
-                            let tx_end = cur_time + self.ns_per_byte * packet.size_byte;
+                            let tx_end = cur_time + self.bandwidth_gbps * 8 * packet.size_byte;
                             let rx_end = tx_end + self.latency_ns;
 
                             //println!("\x1b[0;3{}m@{} Router {} sent {:?} to {}@{}",

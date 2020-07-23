@@ -8,16 +8,11 @@ mod server;
 mod tcp;
 
 // but it's much easier to use if they're not in different modules
-//pub use self::network::*;
 pub use self::router::*;
 pub use self::routing::*;
 pub use self::server::*;
 pub use self::tcp::*;
 
-//use crate::router::{Router, RouterBuilder};
-//use crate::routing::{build_clos, route_all, Network};
-//use crate::server::{Server, ServerBuilder};
-//use crate::tcp::{Flow, Packet};
 use csv::ReaderBuilder;
 use rustasim::spsc::Producer;
 use rustasim::{start, Advancer, Event, EventType};
@@ -47,6 +42,14 @@ pub struct SimConfig {
 
     /// Flow file
     pub flow_file: String,
+
+    /// Link bandwidth
+    pub bandwidth_gbps: u64,
+
+    /// Server<>ToR<>* latency
+    pub latency_ns: Time,
+    // ToR<>* latency
+    //pub tor_out_latency_ns: Time,
 }
 
 /// Topology types
@@ -85,6 +88,17 @@ impl std::fmt::Debug for NetworkEvent {
     }
 }
 
+/// Computes the final transmit and receive times for a packet
+pub fn tx_rx_time(
+    cur_time: Time,
+    packet_size_bytes: u64,
+    latency: Time,
+    bandwidth_gbps: u64,
+) -> (Time, Time) {
+    let tx_time = cur_time + 8 * packet_size_bytes / bandwidth_gbps;
+    (tx_time, tx_time + latency)
+}
+
 // TODO change this API, connect(a, b) function, connectable just has functions for giving and
 // getting queues.
 /// A standard interface for connecting devices of all types
@@ -112,7 +126,7 @@ pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>
     };
     let n_links: u64 = (&net).iter().map(|(_, v)| v.len() as u64).sum();
 
-    let mut world = World::new_from_network(net, n_hosts);
+    let mut world = World::new_from_network(net, &config, n_hosts);
 
     // Flows
     let mut flows = Vec::new();
@@ -224,18 +238,24 @@ struct World {
 /// Setting up and running the simulation are done in two phases. This feels like good design, but
 /// it is not clear to me why.
 impl World {
-    pub fn new_from_network(network: Network, n_hosts: usize) -> World {
+    pub fn new_from_network(network: Network, config: &SimConfig, n_hosts: usize) -> World {
         let mut server_builders: Vec<ServerBuilder> = Vec::new();
         let mut router_builders: Vec<RouterBuilder> = Vec::new();
 
         // Host builders, they don't connect to anything else
         for id in 1..n_hosts + 1 {
-            server_builders.push(ServerBuilder::new(id));
+            server_builders.push(
+                ServerBuilder::new(id)
+                    .latency_ns(config.latency_ns)
+                    .bandwidth_gbps(config.bandwidth_gbps),
+            );
         }
 
         // Router builders, we can connect those we know about
         for id in n_hosts + 1..network.len() + 1 {
-            let mut rb = RouterBuilder::new(id);
+            let mut rb = RouterBuilder::new(id)
+                .latency_ns(config.latency_ns)
+                .bandwidth_gbps(config.bandwidth_gbps);
             for &n in &network[&id] {
                 // skip those who are not connected yet...
                 if n >= id {
