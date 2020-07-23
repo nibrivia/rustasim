@@ -1,7 +1,7 @@
 //! Server module
 
 use crate::tcp;
-use crate::{Connectable, Device, ModelEvent, NetworkEvent, Q_SIZE};
+use crate::{Connectable, ModelEvent, NetworkEvent, Q_SIZE};
 use rustasim::spsc;
 use rustasim::spsc::*;
 use rustasim::{ActorState, Advancer, Event, EventType, Merger};
@@ -30,10 +30,6 @@ pub struct ServerBuilder {
 impl Connectable for &mut ServerBuilder {
     fn id(&self) -> usize {
         self.id
-    }
-
-    fn flavor(&self) -> Device {
-        Device::Server
     }
 
     fn connect(&mut self, mut other: impl Connectable) {

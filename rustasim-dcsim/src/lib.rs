@@ -85,25 +85,12 @@ impl std::fmt::Debug for NetworkEvent {
     }
 }
 
-/// Device types
-#[derive(Debug)]
-pub enum Device {
-    /// Router device type
-    Router,
-
-    /// Server device type
-    Server,
-}
-
 // TODO change this API, connect(a, b) function, connectable just has functions for giving and
 // getting queues.
 /// A standard interface for connecting devices of all types
 pub trait Connectable {
     /// The unique ID of this connectable
     fn id(&self) -> usize;
-
-    /// Whether it is a Router or a Server
-    fn flavor(&self) -> Device;
 
     /// Connect these two routers together, public facing
     fn connect(&mut self, other: impl Connectable);

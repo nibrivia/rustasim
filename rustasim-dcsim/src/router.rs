@@ -1,6 +1,6 @@
 //! Router module, takes care of ToRs and backbone switches
 
-use crate::{Connectable, Device, ModelEvent, NetworkEvent, Q_SIZE};
+use crate::{Connectable, ModelEvent, NetworkEvent, Q_SIZE};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use rustasim::spsc;
@@ -37,10 +37,6 @@ pub struct RouterBuilder {
 impl Connectable for &mut RouterBuilder {
     fn id(&self) -> usize {
         self.id
-    }
-
-    fn flavor(&self) -> Device {
-        Device::Router
     }
 
     fn connect(&mut self, mut other: impl Connectable) {
