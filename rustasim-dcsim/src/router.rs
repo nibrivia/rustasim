@@ -1,6 +1,6 @@
 //! Router module, takes care of ToRs and backbone switches
 
-use crate::network::{Connectable, Device, ModelEvent, NetworkEvent, Q_SIZE};
+use crate::{Connectable, Device, ModelEvent, NetworkEvent, Q_SIZE};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use rustasim::spsc;

@@ -1,7 +1,7 @@
 //! Server module
 
-use crate::network::{Connectable, Device, ModelEvent, NetworkEvent, Q_SIZE};
 use crate::tcp;
+use crate::{Connectable, Device, ModelEvent, NetworkEvent, Q_SIZE};
 use rustasim::spsc;
 use rustasim::spsc::*;
 use rustasim::{ActorState, Advancer, Event, EventType, Merger};
