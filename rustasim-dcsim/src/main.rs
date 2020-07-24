@@ -46,8 +46,6 @@ fn main() {
         return;
     }
 
-    println!("{:#?}", args);
-
     let topology = if let Some(n_racks) = args.flag_fc {
         Topology::FullyConnected(n_racks)
     } else if args.flag_clos_up.is_some() && args.flag_clos_down.is_some() {

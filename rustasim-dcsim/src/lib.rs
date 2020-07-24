@@ -122,11 +122,19 @@ pub trait Connectable {
 /// Takes care of properly building the simulation object, running it, and reporting to the user
 pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>> {
     println!("Setup...");
+
+    println!("  Creating network... ");
     let (net, n_hosts) = match config.topology {
         Topology::CLOS(u, d) => build_clos(u, d),
         Topology::FullyConnected(k) => build_fc(k, k - 1),
     };
     let n_links: u64 = (&net).iter().map(|(_, v)| v.len() as u64).sum();
+    println!(
+        "    {} devices, {} hosts, {} links",
+        net.len(),
+        n_hosts,
+        n_links
+    );
 
     let mut world = World::new_from_network(net, &config, n_hosts);
 
@@ -170,10 +178,11 @@ pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>
     */
     world.add_flows(flows);
 
-    println!("Run...");
+    println!("Running on {} cores...", n_cpus);
     let start = Instant::now();
     let counts = world.start(n_cpus, config.time_limit);
     let duration = start.elapsed();
+    println!("  ok");
 
     let n_actors = counts.len();
     let n_cpus = std::cmp::min(n_cpus, n_actors);
@@ -288,14 +297,14 @@ impl World {
 
         // Instatiate everyone world
         let mut chans = HashMap::new();
-        println!("  Build servers...");
+        println!("  Building {} servers...", server_builders.len());
         let mut servers = vec![];
         for mut b in server_builders {
             chans.insert(b.id, b.connect_world());
             servers.push(b.build());
         }
 
-        println!("  Build routers...");
+        println!("  Building {} routers...", router_builders.len());
         let mut routers = vec![];
         for mut rb in router_builders {
             chans.insert(rb.id, rb.connect_world());
@@ -311,7 +320,7 @@ impl World {
 
     /// Adds specified flows to the current network
     pub fn add_flows(&mut self, flows: Vec<(u64, Flow)>) {
-        println!("  Init flows...");
+        println!("  Init {} flows...", flows.len());
         for (time, f) in flows {
             self.chans[&f.src]
                 .push(Event {

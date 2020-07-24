@@ -55,12 +55,11 @@ where
 
 /// Runs until no more progress can be made at all...
 pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
-    id: usize,
+    _id: usize,
     counter: Arc<RelaxedCounter>,
     n_tasks: usize,
     task_heap: Vec<LockedTaskHeap<T, R>>,
 ) -> Vec<R> {
-    println!("{} start", id);
     let mut counts = Vec::new();
 
     // rng
@@ -84,7 +83,6 @@ pub fn run<T: Ord + Copy + Debug + num::Zero, R: Send>(
                 }
             }
         } else if counter.get() == n_tasks {
-            println!("{} finished", id);
             return counts;
         } else {
             //println!("huh");
