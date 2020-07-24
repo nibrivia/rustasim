@@ -313,7 +313,7 @@ impl Advancer<u64, u64> for Router {
                             if event.time + 3 * 8 * 1500 * self.bandwidth_gbps
                                 < self.out_times[next_hop_ix]
                             {
-                                println!("Router {} drop {:?}", self.id, packet);
+                                //println!("@{} Router {} drop {:?}", event.time, self.id, packet);
                                 continue;
                             }
 

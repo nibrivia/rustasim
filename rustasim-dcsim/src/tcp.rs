@@ -1,6 +1,7 @@
 //! Implements a basic version of TCP
 
 use crate::Time;
+use std::collections::VecDeque;
 
 /// Contains the timeout time, flow_id and seq_num
 pub type Timeout = (Time, usize, usize);
@@ -54,10 +55,12 @@ pub struct Flow {
     pub dst: usize,
     size_byte: u64,
 
-    cwnd: u64,
-    next_seq: usize,
+    cwnd: usize,
+    outstanding: usize,
 
+    next_seq: usize,
     acked: Vec<bool>,
+    rtx_queue: VecDeque<usize>,
 }
 
 impl Flow {
@@ -70,13 +73,33 @@ impl Flow {
 
             size_byte,
             cwnd: 2,
+            outstanding: 0,
+
             next_seq: 0,
             acked: Vec::new(),
+            rtx_queue: VecDeque::new(),
         }
     }
 
+    /// Computes the current timeout
     fn rto(&self) -> Time {
         MIN_RTO // 5ms
+    }
+
+    /// Generates the packet with the given sequence number for this flow
+    fn gen_packet(&self, seq_num: usize) -> Packet {
+        Packet {
+            src: self.src,
+            dst: self.dst,
+            seq_num,
+            size_byte: BYTES_PER_PACKET,
+
+            flow_id: self.flow_id,
+            is_ack: false,
+
+            //ttl: 10,
+            sent_ns: 0,
+        }
     }
 
     /// Starts the flow, returns the initial burst of packets to send
@@ -93,35 +116,56 @@ impl Flow {
             }
         }
 
+        self.outstanding = packets.len();
+
         (packets, timeouts)
     }
 
     /// Receives an ack and returns the appropriate packets to sene
     pub fn src_receive(&mut self, packet: Packet) -> (Vec<Packet>, Vec<Timeout>) {
+        // if we've already acked the packet, do nothing
+        if !self.acked[packet.seq_num] {
+            self.outstanding -= 1;
+        }
+
         // mark packet as ack'd
-        self.acked[packet.seq_num as usize] = true;
+        self.acked[packet.seq_num] = true;
 
         // next packets to send
         let mut packets = Vec::new();
         let mut timeouts = Vec::new();
-        if let Some(p) = self.next() {
-            timeouts.push((self.rto(), self.flow_id, p.seq_num));
-            packets.push(p);
+        for _ in self.outstanding..self.cwnd {
+            if let Some(p) = self.next() {
+                timeouts.push((self.rto(), self.flow_id, p.seq_num));
+                packets.push(p);
+            } else {
+                break;
+            }
         }
 
+        self.outstanding += packets.len();
         (packets, timeouts)
     }
 
     /// To be called on a timeout
     pub fn timeout(&mut self, seq_num: usize) -> (Vec<Packet>, Vec<Timeout>) {
         if !self.acked[seq_num] {
-            println!(
-                "{} rx timeout for #{}, acked: {}",
-                self.flow_id, seq_num, self.acked[seq_num]
-            );
+            self.outstanding -= 1;
+            self.rtx_queue.push_back(seq_num);
 
-            // TODO retransmit *something*?
-            (vec![], vec![])
+            let mut packets = Vec::new();
+            let mut timeouts = Vec::new();
+            for _ in self.outstanding..self.cwnd {
+                if let Some(p) = self.next() {
+                    timeouts.push((self.rto(), self.flow_id, p.seq_num));
+                    packets.push(p);
+                } else {
+                    break;
+                }
+            }
+
+            self.outstanding += packets.len();
+            (packets, timeouts)
         } else {
             (vec![], vec![])
         }
@@ -132,20 +176,24 @@ impl Iterator for Flow {
     type Item = Packet;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // TODO manage retransmits
+        // First retransmits...
+        while let Some(seq_num) = self.rtx_queue.pop_front() {
+            // we might have gotten ack'd since being added to the queue, if so, try again
+            if self.acked[seq_num] {
+                continue;
+            }
+
+            // Found something to retransmit, we're done
+            //println!("Flow {} rtx #{}", self.flow_id, seq_num);
+            return Some(self.gen_packet(seq_num));
+        }
+
+        // then, normal packets
         if self.next_seq as u64 * BYTES_PER_PACKET < self.size_byte {
-            let p = Packet {
-                src: self.src,
-                dst: self.dst,
-                seq_num: self.next_seq,
-                size_byte: BYTES_PER_PACKET,
+            // next packet
+            let p = self.gen_packet(self.next_seq);
 
-                flow_id: self.flow_id,
-                is_ack: false,
-
-                //ttl: 10,
-                sent_ns: 0,
-            };
+            // update for next one
             self.next_seq += 1;
 
             // hasn't been acked yet...
@@ -153,6 +201,7 @@ impl Iterator for Flow {
 
             Some(p)
         } else {
+            // done
             None
         }
     }
