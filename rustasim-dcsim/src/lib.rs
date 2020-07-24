@@ -1,4 +1,5 @@
 #![deny(missing_docs)]
+#![deny(missing_debug_implementations)]
 //! Datacenter network model
 
 // I like to have many small files
@@ -34,6 +35,7 @@ pub type ActorResult = u64;
 pub type ModelEvent = Event<Time, NetworkEvent>;
 
 /// Simulation parameters
+#[derive(Debug)]
 pub struct SimConfig {
     /// Simulation end, in ns
     pub time_limit: Time,
