@@ -295,13 +295,14 @@ impl Advancer<Time, u64> for Server {
                     // both of these might schedule packets and timeouts
                     let (packets, timeouts) = match net_event {
                         NetworkEvent::Timeout => {
+                            // TODO process ties in one go?
                             // See if we can process any timeouts
                             let mut res = (vec![], vec![]);
                             if let Some(Reverse((t, flow_id, seq_num))) = self.timeouts.peek() {
                                 // process (should always be == or >)
                                 if *t <= event.time {
                                     // Get packets and timeout to send
-                                    print!("@{} ", event.time);
+                                    //print!("@{} ", event.time);
                                     res = self.flows.get_mut(&flow_id).unwrap().timeout(*seq_num);
 
                                     // advance the heap

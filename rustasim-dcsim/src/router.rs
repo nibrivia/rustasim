@@ -310,11 +310,10 @@ impl Advancer<u64, u64> for Router {
                                 *self.route[packet.dst].choose(&mut rng).unwrap();
 
                             // drop packet if our outgoing queue is full
-                            if event.time
-                                > self.out_times[next_hop_ix]
-                                    + 1000 * 8 * 1500 * self.bandwidth_gbps
+                            if event.time + 3 * 8 * 1500 * self.bandwidth_gbps
+                                < self.out_times[next_hop_ix]
                             {
-                                //println!("Router {} drop {:?}", self.id, packet);
+                                println!("Router {} drop {:?}", self.id, packet);
                                 continue;
                             }
 

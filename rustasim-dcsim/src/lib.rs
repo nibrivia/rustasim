@@ -149,7 +149,7 @@ pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>
     let flow_rdr = ReaderBuilder::new()
         .has_headers(false)
         .delimiter(b' ')
-        .from_path("/home/nibr/opera-sim/Figure7_datamining/3to1_clos/traffic_gen/flows_25percLoad_10sec_648hosts_3to1.htsim")
+        .from_path(config.flow_file)
         .expect("File open failed");
 
     for (flow_id, try_line) in flow_rdr.into_records().enumerate() {
@@ -168,7 +168,8 @@ pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>
         let flow = Flow::new(flow_id, src, dst, size_byte);
         flows.push((time, flow));
     }
-    /*
+    /*/
+    let mut flow_id = 0;
     for src_id in 1..(n_hosts + 1) {
         for dst_id in 1..(n_hosts + 1) {
             // skip self flows...
@@ -178,7 +179,7 @@ pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>
 
             let f = Flow::new(flow_id, src_id, dst_id, 100000000);
             flow_id += 1;
-            flows.push(f);
+            flows.push(((flow_id * 1_000) as Time, f));
         }
     }
     */
@@ -201,9 +202,10 @@ pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>
         0.
     };
 
-    // each link is 8Gbps, time_limit/1e9 is in seconds which is how much we simulated
+    // time_limit/1e9 is in seconds which is how much we simulated
     // divide by the time it took us -> simulation bandwidth
-    let gbps = (n_links * 8 * config.time_limit) as f64 / 1e9 / duration.as_secs_f64();
+    let gbps =
+        (n_links * config.bandwidth_gbps * config.time_limit) as f64 / 1e9 / duration.as_secs_f64();
 
     println!(
         "= {} in {:.3}s. {} actors ({} hosts) for {:.3}s on {} cores",
@@ -230,7 +232,7 @@ pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>
         "  {:.3} gbps, {:.3} gbps/actor ({} links total)",
         gbps,
         (gbps / n_actors as f64),
-        n_links
+        n_links,
     );
 
     println!("done");
