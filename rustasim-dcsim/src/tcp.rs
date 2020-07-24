@@ -83,7 +83,7 @@ impl Flow {
 
     /// Computes the current timeout
     fn rto(&self) -> Time {
-        MIN_RTO // 5ms
+        MIN_RTO
     }
 
     /// Generates the packet with the given sequence number for this flow
