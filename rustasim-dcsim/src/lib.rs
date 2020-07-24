@@ -16,6 +16,7 @@ pub use self::tcp::*;
 use csv::ReaderBuilder;
 use rustasim::spsc::Producer;
 use rustasim::{start, Advancer, Event, EventType};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::error::Error;
 use std::time::Instant;
@@ -53,6 +54,7 @@ pub struct SimConfig {
 }
 
 /// Topology types
+#[derive(Debug, Deserialize)]
 pub enum Topology {
     /// 3 tiered CLOS(u, d) with `u` uplinks and `d` downlinks
     CLOS(usize, usize),
