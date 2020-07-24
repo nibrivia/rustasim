@@ -1,7 +1,15 @@
 //! Implements a basic version of TCP
 
+use crate::Time;
+
+/// Contains the timeout time, flow_id and seq_num
+pub type Timeout = (Time, usize, u64);
+
 /// This is based on typical MTUs.
-const BYTES_PER_PACKET: u64 = 1500;
+pub const BYTES_PER_PACKET: u64 = 1500;
+
+/// Smallest RTO
+pub const MIN_RTO: Time = 1_000_000;
 
 /// Describes a TCP/IP packet
 ///
@@ -27,11 +35,10 @@ pub struct Packet {
     /// The flow ID this packet belongs to
     pub flow_id: usize,
 
-    /// How many more hops can this packet go?
-    pub ttl: u64,
-
+    ///// How many more hops can this packet go?
+    //pub ttl: usize,
     /// When was this packet originally created, in ns
-    pub sent_ns: u64,
+    pub sent_ns: Time,
 }
 
 /// Flow data structure
@@ -65,21 +72,29 @@ impl Flow {
         }
     }
 
+    fn rto(&self) -> Time {
+        MIN_RTO // 5ms
+    }
+
     /// Starts the flow, returns the initial burst of packets to send
-    pub fn start(&mut self) -> (Vec<Packet>, Vec<u64>) {
+    pub fn start(&mut self) -> (Vec<Packet>, Vec<Timeout>) {
         let mut packets = Vec::new();
+        let mut timeouts = Vec::new();
         for _ in 0..self.cwnd {
             match self.next() {
                 None => break,
-                Some(p) => packets.push(p),
+                Some(p) => {
+                    timeouts.push((self.rto(), self.flow_id, p.seq_num));
+                    packets.push(p);
+                }
             }
         }
 
-        (packets, Vec::new())
+        (packets, timeouts)
     }
 
-    /// Receives an ack and returns the appropriate packets to send
-    pub fn src_receive(&mut self, _packet: Packet) -> (Vec<Packet>, Vec<u64>) {
+    /// Receives an ack and returns the appropriate packets to sene
+    pub fn src_receive(&mut self, _packet: Packet) -> (Vec<Packet>, Vec<Timeout>) {
         let mut packets = Vec::new();
         if let Some(p) = self.next() {
             packets.push(p);
@@ -89,7 +104,8 @@ impl Flow {
     }
 
     /// To be called on a timeout
-    pub fn timeout(&mut self, _timeout: u64) -> (Vec<Packet>, Vec<u64>) {
+    pub fn timeout(&mut self, seq_num: u64) -> (Vec<Packet>, Vec<Timeout>) {
+        println!("{} rx timeout for #{}", self.flow_id, seq_num);
         (vec![], vec![])
     }
 }
@@ -109,7 +125,7 @@ impl Iterator for Flow {
                 flow_id: self.flow_id,
                 is_ack: false,
 
-                ttl: 10,
+                //ttl: 10,
                 sent_ns: 0,
             };
             self.next_seq += 1;

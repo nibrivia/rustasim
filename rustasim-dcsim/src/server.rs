@@ -1,11 +1,17 @@
 //! Server module
 
 use crate::tcp;
+use crate::tcp::Timeout;
+use crate::tcp::MIN_RTO;
 use crate::{tx_rx_time, Connectable, ModelEvent, NetworkEvent, Time, Q_SIZE};
 use rustasim::spsc;
 use rustasim::spsc::*;
 use rustasim::{ActorState, Advancer, Event, EventType, Merger};
+use std::cmp::Reverse;
+use std::collections::BinaryHeap;
 use std::collections::HashMap;
+
+type MinHeap<T> = BinaryHeap<Reverse<T>>;
 
 /// A ServerBuilder is used to create a Server
 ///
@@ -145,9 +151,9 @@ impl ServerBuilder {
         // null event to ourselves...
         self.out_queues[0]
             .push(Event {
-                event_type: EventType::Null,
+                event_type: EventType::ModelEvent(NetworkEvent::Timeout),
                 src: self.id,
-                time: 1_000_000_000_000_000,
+                time: MIN_RTO,
             })
             .unwrap();
 
@@ -164,6 +170,7 @@ impl ServerBuilder {
             _ix_to_id: self.ix_to_id,
 
             tor_time: 0,
+            timeouts: MinHeap::new(),
             count: 0,
 
             flows: HashMap::new(),
@@ -182,14 +189,15 @@ pub struct Server {
     pub id: usize,
 
     bandwidth_gbps: u64,
-    latency_ns: u64,
+    latency_ns: Time,
 
-    merger: Merger<u64, NetworkEvent>,
+    merger: Merger<Time, NetworkEvent>,
     out_queues: Vec<Producer<ModelEvent>>,
 
     _ix_to_id: Vec<usize>,
 
-    tor_time: u64,
+    tor_time: Time,
+    timeouts: MinHeap<Timeout>,
 
     flows: HashMap<usize, tcp::Flow>,
 
@@ -210,9 +218,8 @@ impl Server {
     }
 }
 
-impl Advancer<u64, u64> for Server {
-    //pub fn advance(&mut self, log: slog::Logger, start: Instant) -> bool {
-    fn advance(&mut self) -> ActorState<u64, u64> {
+impl Advancer<Time, u64> for Server {
+    fn advance(&mut self) -> ActorState<Time, u64> {
         //info!(log, "start...");
         //println!(" Server {} advance", self.id);
 
@@ -274,13 +281,6 @@ impl Advancer<u64, u64> for Server {
                         //self.count += 1;
 
                         self.tor_time = event.time;
-                        /*println!(
-                            "next Server {} @{}: Null({}) >{}",
-                            self.id,
-                            event.time,
-                            event.time + self.latency_ns,
-                            self._ix_to_id[1]
-                        );*/
                     }
 
                     // We're stalled, return so that we can be rescheduled later
@@ -293,7 +293,43 @@ impl Advancer<u64, u64> for Server {
                 EventType::ModelEvent(net_event) => {
                     self.count += 1;
                     // both of these might schedule packets and timeouts
-                    let (packets, _timeouts) = match net_event {
+                    let (packets, timeouts) = match net_event {
+                        NetworkEvent::Timeout => {
+                            // See if we can process any timeouts
+                            let mut res = (vec![], vec![]);
+                            if let Some(Reverse((t, flow_id, seq_num))) = self.timeouts.peek() {
+                                // process (should always be == or >)
+                                if *t <= event.time {
+                                    // Get packets and timeout to send
+                                    print!("@{} ", event.time);
+                                    res = self.flows.get_mut(&flow_id).unwrap().timeout(*seq_num);
+
+                                    // advance the heap
+                                    self.timeouts.pop();
+                                }
+                            }
+
+                            // Schedule next timeout, default min_rto
+                            let mut timeout_event = Event {
+                                event_type: EventType::ModelEvent(NetworkEvent::Timeout),
+                                src: self.id,
+                                time: event.time + MIN_RTO,
+                            };
+
+                            // or next timeout if there's one before then...
+                            if let Some(Reverse((t, _, _))) = self.timeouts.peek() {
+                                if *t < timeout_event.time {
+                                    timeout_event.time = *t;
+                                }
+                            }
+
+                            // actually schedule the timeout
+                            self.out_queues[0].push(timeout_event).unwrap();
+
+                            // return our packets
+                            res
+                        }
+
                         NetworkEvent::Flow(mut flow) => {
                             let start = flow.start();
                             self.flows.insert(flow.flow_id, flow);
@@ -359,7 +395,10 @@ impl Advancer<u64, u64> for Server {
 
                     self.tor_time = tx_end;
 
-                    // TODO schedule the timeouts
+                    for (delay, flow_id, seq_num) in timeouts {
+                        self.timeouts
+                            .push(Reverse((event.time + delay, flow_id, seq_num)));
+                    }
                 }
             }
         }

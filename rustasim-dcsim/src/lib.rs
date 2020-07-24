@@ -75,6 +75,9 @@ pub enum NetworkEvent {
 
     /// Packet arrival
     Packet(Packet),
+
+    /// Server timeout, server needs to check itself for timeouts
+    Timeout,
 }
 
 impl std::fmt::Debug for NetworkEvent {
@@ -88,6 +91,7 @@ impl std::fmt::Debug for NetworkEvent {
                     "Packet"
                 }
             }
+            NetworkEvent::Timeout => "Timeout",
         })
     }
 }

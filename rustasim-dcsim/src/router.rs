@@ -301,7 +301,8 @@ impl Advancer<u64, u64> for Router {
                     self.count += 1;
                     match model_event {
                         // this is only for servers, not routers
-                        NetworkEvent::Flow(_flow) => unreachable!(),
+                        NetworkEvent::Flow(_) => unreachable!(),
+                        NetworkEvent::Timeout => unreachable!(),
 
                         NetworkEvent::Packet(packet) => {
                             // Next step
