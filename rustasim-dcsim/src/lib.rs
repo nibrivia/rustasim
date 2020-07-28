@@ -71,7 +71,7 @@ pub enum Topology {
 /// Datacenter network model events
 pub enum NetworkEvent {
     /// Flow start
-    Flow(Flow),
+    Flow(FlowDesc),
 
     /// Packet arrival
     Packet(Packet),
@@ -152,7 +152,7 @@ pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>
         .from_path(config.flow_file)
         .expect("File open failed");
 
-    for (flow_id, try_line) in flow_rdr.into_records().enumerate() {
+    for try_line in flow_rdr.into_records() {
         let line = try_line?;
 
         // source is 0-indexed...
@@ -165,7 +165,7 @@ pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>
             break;
         }
 
-        let flow = Flow::new(flow_id, src, dst, size_byte);
+        let flow: FlowDesc = (src, dst, size_byte);
         flows.push((time, flow));
     }
     /*/
@@ -327,10 +327,10 @@ impl World {
     }
 
     /// Adds specified flows to the current network
-    pub fn add_flows(&mut self, flows: Vec<(u64, Flow)>) {
+    pub fn add_flows(&mut self, flows: Vec<(u64, FlowDesc)>) {
         println!("  Init {} flows...", flows.len());
         for (time, f) in flows {
-            self.chans[&f.src]
+            self.chans[&f.0]
                 .push(Event {
                     src: 0,
                     time,

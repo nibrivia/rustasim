@@ -6,7 +6,7 @@ const USAGE: &str = "
 Rustasim datacenter simulator.
 
 Usage:
-    rustasim-dcsim [--limit TIME] --flows FILE ((--clos-up UP --clos-down DOWN) | --fc <N_RACKS>) [--latency LATENCY --bandwidth BANDWIDTH]
+    rustasim-dcsim [--limit TIME] (--flows FILE | --load LOAD) ((--clos-up UP --clos-down DOWN) | --fc <N_RACKS>) [--latency LATENCY --bandwidth BANDWIDTH]
     rustasim-dcsim --help
 
 Options:
@@ -17,6 +17,7 @@ Options:
     --bandwidth BANDWIDTH    Inter-device bandwidth, in gigabits/sec (note: bits, NOT bytes) [default: 10].
 
     -f, --flows FILE         Flow file, following the htsim format.
+    --load LOAD              (unused) Load between 0 and 1, hosts will average LOAD*BANDWIDTH network demand
 
     --clos-up UP             Use 3:1 clos topology with UP uplinks
     --clos-down DOWN         Use 3:1 clos topology with DOWN downlinks.
@@ -25,14 +26,22 @@ Options:
 
 #[derive(Debug, Deserialize)]
 struct Args {
+    // ui
     flag_help: bool,
+
+    // timing and networ properties
     flag_limit: f64,
+    flag_latency: u64,
+    flag_bandwidth: u64,
+
+    // flows
     flag_flows: Option<String>,
+    flag_load: Option<f64>,
+
+    // topology
     flag_clos_up: Option<usize>,
     flag_clos_down: Option<usize>,
     flag_fc: Option<usize>,
-    flag_latency: u64,
-    flag_bandwidth: u64,
 }
 
 fn main() {
@@ -57,9 +66,13 @@ fn main() {
         }
         Topology::CLOS(u, d)
     } else {
-        print!("Couldn't parse topology... usage:\n\n{}", USAGE);
+        print!("FAIL: Couldn't parse topology...\n\n{}", USAGE);
         std::process::exit(1);
     };
+
+    if args.flag_load.is_some() {
+        unimplemented!();
+    }
 
     #[allow(clippy::zero_prefixed_literal)]
     let time_limit: u64 = (args.flag_limit * 1e9) as u64;

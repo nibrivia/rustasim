@@ -1,6 +1,7 @@
 //! Server module
 
 use crate::tcp;
+use crate::tcp::Flow;
 use crate::tcp::Timeout;
 use crate::tcp::MIN_RTO;
 use crate::{tx_rx_time, Connectable, ModelEvent, NetworkEvent, Time, Q_SIZE};
@@ -173,7 +174,7 @@ impl ServerBuilder {
             timeouts: MinHeap::new(),
             count: 0,
 
-            flows: HashMap::new(),
+            flows: Vec::new(),
         }
     }
 }
@@ -199,7 +200,7 @@ pub struct Server {
     tor_time: Time,
     timeouts: MinHeap<Timeout>,
 
-    flows: HashMap<usize, tcp::Flow>,
+    flows: Vec<tcp::Flow>,
 
     count: u64,
 }
@@ -294,6 +295,7 @@ impl Advancer<Time, u64> for Server {
                     self.count += 1;
                     // both of these might schedule packets and timeouts
                     let (packets, timeouts) = match net_event {
+                        // TIMEOUT ==============================
                         NetworkEvent::Timeout => {
                             // TODO process ties in one go?
                             // See if we can process any timeouts
@@ -303,7 +305,7 @@ impl Advancer<Time, u64> for Server {
                                 if *t <= event.time {
                                     // Get packets and timeout to send
                                     //print!("@{} ", event.time);
-                                    res = self.flows.get_mut(&flow_id).unwrap().timeout(*seq_num);
+                                    res = self.flows.get_mut(*flow_id).unwrap().timeout(*seq_num);
 
                                     // advance the heap
                                     self.timeouts.pop();
@@ -331,25 +333,36 @@ impl Advancer<Time, u64> for Server {
                             res
                         }
 
-                        NetworkEvent::Flow(mut flow) => {
-                            let start = flow.start();
+                        // FLOW =================================
+                        NetworkEvent::Flow((src, dst, size_byte)) => {
+                            // create flow
+                            let flow_id = self.flows.len();
+                            let mut flow = Flow::new(flow_id, src, dst, size_byte);
+
+                            // get first group of packets to return later
+                            let start = flow.start(event.time);
+
+                            // add to our book-keeping
                             self.flows.insert(flow.flow_id, flow);
+
+                            // return first packet/timeouts
                             start
                         }
 
+                        // PACKET ===============================
                         NetworkEvent::Packet(mut packet) => {
                             if packet.is_ack {
-                                let flow = self.flows.get_mut(&packet.flow_id).unwrap();
-                                flow.src_receive(packet)
+                                let flow = self.flows.get_mut(packet.flow_id).unwrap();
+                                flow.src_receive(event.time, packet)
                             } else {
                                 // this is data, send ack back
-                                // since we're only sending one packet, skip the return vectors
                                 packet.dst = packet.src;
                                 packet.src = self.id;
 
                                 packet.is_ack = true;
-                                packet.size_byte = 10;
+                                packet.size_byte = 10; // TODO parametrize
 
+                                // since we're only sending one packet, no timeout, skip to the next event
                                 let (tx_end, rx_end) = tx_rx_time(
                                     self.tor_time,
                                     packet.size_byte,
@@ -396,6 +409,7 @@ impl Advancer<Time, u64> for Server {
 
                     self.tor_time = tx_end;
 
+                    // schedule the timeouts
                     for (delay, flow_id, seq_num) in timeouts {
                         self.timeouts
                             .push(Reverse((event.time + delay, flow_id, seq_num)));

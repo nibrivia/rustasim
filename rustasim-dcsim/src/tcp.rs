@@ -42,6 +42,10 @@ pub struct Packet {
     pub sent_ns: Time,
 }
 
+// flow_id, src, dst, size_bytes
+/// Short description of a flow object
+pub type FlowDesc = (usize, usize, u64);
+
 /// Flow data structure
 #[derive(Debug)]
 pub struct Flow {
@@ -55,8 +59,11 @@ pub struct Flow {
     pub dst: usize,
     size_byte: u64,
 
+    start: Time,
+
     cwnd: usize,
     outstanding: usize,
+    n_acked: u64,
 
     next_seq: usize,
     acked: Vec<bool>,
@@ -72,8 +79,11 @@ impl Flow {
             dst,
 
             size_byte,
-            cwnd: 2,
+            start: 0,
+
+            cwnd: 5,
             outstanding: 0,
+            n_acked: 0,
 
             next_seq: 0,
             acked: Vec::new(),
@@ -103,7 +113,7 @@ impl Flow {
     }
 
     /// Starts the flow, returns the initial burst of packets to send
-    pub fn start(&mut self) -> (Vec<Packet>, Vec<Timeout>) {
+    pub fn start(&mut self, time: Time) -> (Vec<Packet>, Vec<Timeout>) {
         let mut packets = Vec::new();
         let mut timeouts = Vec::new();
         for _ in 0..self.cwnd {
@@ -117,19 +127,36 @@ impl Flow {
         }
 
         self.outstanding = packets.len();
+        self.start = time;
 
         (packets, timeouts)
     }
 
     /// Receives an ack and returns the appropriate packets to sene
-    pub fn src_receive(&mut self, packet: Packet) -> (Vec<Packet>, Vec<Timeout>) {
+    pub fn src_receive(&mut self, time: Time, packet: Packet) -> (Vec<Packet>, Vec<Timeout>) {
         // if we've already acked the packet, do nothing
         if !self.acked[packet.seq_num] {
             self.outstanding -= 1;
+            self.n_acked += 1;
+            if self.n_acked * BYTES_PER_PACKET >= self.size_byte {
+                println!(
+                    "{src},{dst},{start},{end},{size_byte},{fct}",
+                    src = self.src,
+                    dst = self.dst,
+                    size_byte = self.size_byte,
+                    start = self.start,
+                    end = time,
+                    fct = time - self.start,
+                );
+            }
+            //self.cwnd += 1/self.cwnd;
         }
 
         // mark packet as ack'd
         self.acked[packet.seq_num] = true;
+
+        // TODO rto
+        // TODO cwnd
 
         // next packets to send
         let mut packets = Vec::new();
