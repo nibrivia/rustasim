@@ -61,12 +61,12 @@ fn main() {
         let u = args.flag_clos_up.unwrap();
         let d = args.flag_clos_down.unwrap();
         if (u + d) % 2 != 0 {
-            println!("For a CLOS topology to be valid, k (u+d) must be even! You gave CLOS({}, {}), k: {}\nexit", u, d, u+d);
+            eprintln!("For a CLOS topology to be valid, k (u+d) must be even! You gave CLOS({}, {}), k: {}\nexit", u, d, u+d);
             std::process::exit(1);
         }
         Topology::CLOS(u, d)
     } else {
-        print!("FAIL: Couldn't parse topology...\n\n{}", USAGE);
+        eprint!("FAIL: Couldn't parse topology...\n\n{}", USAGE);
         std::process::exit(1);
     };
 
@@ -89,7 +89,7 @@ fn main() {
 
     let n_cpus = num_cpus::get() - 1;
     if let Err(e) = run_config(config, n_cpus) {
-        println!("Error: {}", e);
+        eprintln!("Error: {}", e);
         std::process::exit(1);
     }
 }

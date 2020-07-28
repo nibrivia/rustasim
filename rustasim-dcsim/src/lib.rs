@@ -127,15 +127,15 @@ pub trait Connectable {
 
 /// Takes care of properly building the simulation object, running it, and reporting to the user
 pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>> {
-    println!("Setup...");
+    eprintln!("Setup...");
 
-    println!("  Creating network... ");
+    eprintln!("  Creating network... ");
     let (net, n_hosts) = match config.topology {
         Topology::CLOS(u, d) => build_clos(u, d),
         Topology::FullyConnected(k) => build_fc(k, k - 1),
     };
     let n_links: u64 = (&net).iter().map(|(_, v)| v.len() as u64).sum();
-    println!(
+    eprintln!(
         "    {} devices, {} hosts, {} links",
         net.len(),
         n_hosts,
@@ -185,11 +185,11 @@ pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>
     */
     world.add_flows(flows);
 
-    println!("Running on {} cores...", n_cpus);
+    eprintln!("Running on {} cores...", n_cpus);
     let start = Instant::now();
     let counts = world.start(n_cpus, config.time_limit);
     let duration = start.elapsed();
-    println!("  ok");
+    eprintln!("  ok");
 
     let n_actors = counts.len();
     let n_cpus = std::cmp::min(n_cpus, n_actors);
@@ -207,7 +207,7 @@ pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>
     let gbps =
         (n_links * config.bandwidth_gbps * config.time_limit) as f64 / 1e9 / duration.as_secs_f64();
 
-    println!(
+    eprintln!(
         "= {} in {:.3}s. {} actors ({} hosts) for {:.3}s on {} cores",
         sum_count,
         duration.as_secs_f32(),
@@ -216,26 +216,26 @@ pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>
         config.time_limit as f64 / 1e9,
         n_cpus,
     );
-    println!(
+    eprintln!(
         "  {:.3}M count/sec, {:.3}M /actors, {:.3}M /cpu",
         (1e6 / ns_per_count as f64),
         (1e6 / (ns_per_count * n_actors as f64)),
         (1e6 / (ns_per_count * n_cpus as f64)),
     );
-    println!(
+    eprintln!(
         "  {:.1} ns/count, {:.1} ns/actor, {:.1} ns/cpu",
         ns_per_count / 1000. as f64,
         ns_per_count * n_actors as f64 / 1000.,
         ns_per_count * n_cpus as f64 / 1000.
     );
-    println!(
+    eprintln!(
         "  {:.3} gbps, {:.3} gbps/actor ({} links total)",
         gbps,
         (gbps / n_actors as f64),
         n_links,
     );
 
-    println!("done");
+    eprintln!("done");
     Ok(())
 }
 
@@ -295,7 +295,7 @@ impl World {
         }
 
         // Routing ---------------------------------------------
-        println!("  Routing...");
+        eprintln!("  Routing...");
         router_builders
             .iter_mut()
             .map(|r| {
@@ -306,14 +306,14 @@ impl World {
 
         // Instatiate everyone world
         let mut chans = HashMap::new();
-        println!("  Building {} servers...", server_builders.len());
+        eprintln!("  Building {} servers...", server_builders.len());
         let mut servers = vec![];
         for mut b in server_builders {
             chans.insert(b.id, b.connect_world());
             servers.push(b.build());
         }
 
-        println!("  Building {} routers...", router_builders.len());
+        eprintln!("  Building {} routers...", router_builders.len());
         let mut routers = vec![];
         for mut rb in router_builders {
             chans.insert(rb.id, rb.connect_world());
@@ -329,7 +329,7 @@ impl World {
 
     /// Adds specified flows to the current network
     pub fn add_flows(&mut self, flows: Vec<(u64, FlowDesc)>) {
-        println!("  Init {} flows...", flows.len());
+        eprintln!("  Init {} flows...", flows.len());
         for (time, f) in flows {
             self.chans[&f.0]
                 .push(Event {
@@ -345,6 +345,9 @@ impl World {
     ///
     /// This will spawn a thread per actor and wait for all of them to end.
     pub fn start(mut self, num_cpus: usize, done: u64) -> Vec<u64> {
+        // csv header, cheating but that's okay here...
+        println!("src,dst,start,end,size_byte,fct_ns");
+
         // Tell everyone when the end is
         for (_, c) in self.chans.iter_mut() {
             c.push(Event {

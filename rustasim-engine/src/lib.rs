@@ -79,7 +79,7 @@ pub fn start<T: 'static + Ord + Copy + Debug + Send + num::Zero, R: 'static + Se
     let shared_counter = Arc::new(RelaxedCounter::new(0));
 
     // Initialize the heaps
-    let n_heaps = 8;
+    let n_heaps = std::cmp::min(16, n_actors);
     let mut heaps = Vec::new();
     for _ in 0..n_heaps {
         let task_heap: LockedTaskHeap<T, R> = Arc::new(Mutex::new(VecDeque::new()));

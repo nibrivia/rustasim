@@ -81,7 +81,7 @@ impl Flow {
             size_byte,
             start: 0,
 
-            cwnd: 5,
+            cwnd: 30,
             outstanding: 0,
             n_acked: 0,
 
