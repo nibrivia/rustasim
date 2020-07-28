@@ -3,4 +3,5 @@ target
 *.log
 Session.vim
 *.svg
+*.csv
 perf.*
