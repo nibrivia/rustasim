@@ -299,6 +299,7 @@ impl Advancer<u64, u64> for Router {
 
                 EventType::ModelEvent(model_event) => {
                     self.count += 1;
+                    //println!("@{} Router rx {:?}", event.time, model_event);
                     match model_event {
                         // this is only for servers, not routers
                         NetworkEvent::Flow(_) => unreachable!(),
@@ -310,7 +311,7 @@ impl Advancer<u64, u64> for Router {
                                 *self.route[packet.dst].choose(&mut rng).unwrap();
 
                             // drop packet if our outgoing queue is full
-                            if event.time + 3 * 8 * 1500 * self.bandwidth_gbps
+                            if event.time + 10 * 8 * 1500 * self.bandwidth_gbps
                                 < self.out_times[next_hop_ix]
                             {
                                 //println!("@{} Router {} drop {:?}", event.time, self.id, packet);
@@ -319,7 +320,7 @@ impl Advancer<u64, u64> for Router {
 
                             // when
                             let cur_time = std::cmp::max(event.time, self.out_times[next_hop_ix]);
-                            let tx_end = cur_time + self.bandwidth_gbps * 8 * packet.size_byte;
+                            let tx_end = cur_time + 8 * packet.size_byte / self.bandwidth_gbps;
                             let rx_end = tx_end + self.latency_ns;
 
                             //println!("\x1b[0;3{}m@{} Router {} sent {:?} to {}@{}",
@@ -346,7 +347,7 @@ impl Advancer<u64, u64> for Router {
             } // end match
         } // end for loop
 
-        //info!(log, "Router #{} done. {} pkts", self.id, self.count);
+        //println!("Router #{} done. {} count", self.id, self.count);
         ActorState::Done(self.count)
     } // end start() function
 } // end NIC methods

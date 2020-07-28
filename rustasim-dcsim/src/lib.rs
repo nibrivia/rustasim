@@ -239,8 +239,15 @@ pub fn run_config(config: SimConfig, n_cpus: usize) -> Result<(), Box<dyn Error>
     Ok(())
 }
 
+/// Main simulation object.
+///
+/// This is where the core of the simualtion setup should happen. Notably it has the important
+/// tasks of connection actors together, and to give "external" events to these actors.
+///
+/// Setting up and running the simulation are done in two phases. This feels like good design, but
+/// it is not clear to me why.
 #[derive(Debug)]
-struct World {
+pub struct World {
     /// The actors themselves
     routers: Vec<Router>,
     servers: Vec<Server>,
@@ -249,14 +256,8 @@ struct World {
     chans: HashMap<usize, Producer<ModelEvent>>,
 }
 
-/// Main simulation object.
-///
-/// This is where the core of the simualtion setup should happen. Notably it has the important
-/// tasks of connection actors together, and to give "external" events to these actors.
-///
-/// Setting up and running the simulation are done in two phases. This feels like good design, but
-/// it is not clear to me why.
 impl World {
+    /// Builds a world based on the network
     pub fn new_from_network(network: Network, config: &SimConfig, n_hosts: usize) -> World {
         let mut server_builders: Vec<ServerBuilder> = Vec::new();
         let mut router_builders: Vec<RouterBuilder> = Vec::new();

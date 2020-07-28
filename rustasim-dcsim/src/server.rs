@@ -230,10 +230,12 @@ impl Advancer<Time, u64> for Server {
         //for event in self.merger {
         while let Some(event) = self.merger.next() {
             //self.count += 1;
-            /*println!(
+            /*
+            println!(
                 " Server {} @{}: <{} {:?}",
                 self.id, event.time, self._ix_to_id[event.src], event.event_type
-            );*/
+            );
+            */
             match event.event_type {
                 EventType::Close => {
                     // ensure everyone ignores us from now until close
@@ -293,10 +295,12 @@ impl Advancer<Time, u64> for Server {
 
                 EventType::ModelEvent(net_event) => {
                     self.count += 1;
+                    //println!("@{} Server {} rx {:?}", event.time, self.id, net_event);
                     // both of these might schedule packets and timeouts
                     let (packets, timeouts) = match net_event {
                         // TIMEOUT ==============================
                         NetworkEvent::Timeout => {
+                            self.count -= 1;
                             // TODO process ties in one go?
                             // See if we can process any timeouts
                             let mut res = (vec![], vec![]);
@@ -395,7 +399,7 @@ impl Advancer<Time, u64> for Server {
                             self.latency_ns,
                             self.bandwidth_gbps,
                         );*/
-                        tx_end += self.bandwidth_gbps * p.size_byte * 8;
+                        tx_end += p.size_byte * 8 / self.bandwidth_gbps;
                         let rx_end = tx_end + self.latency_ns;
 
                         let event = Event {
@@ -418,6 +422,7 @@ impl Advancer<Time, u64> for Server {
             }
         }
 
+        //println!("Server {} done. {} count", self.id, self.count);
         ActorState::Done(self.count)
     }
 }
