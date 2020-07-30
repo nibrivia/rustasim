@@ -78,3 +78,37 @@ dta %>%
          x = "Real time",
          color = "Event dest")
     #geom_point(size = .3)
+
+max_fn <- function(size) {
+    6*500+size*8/10
+}
+
+dta <- read_csv("flows.csv")
+max(dta$end)/1e9
+nrow(dta)
+
+fcts <- dta %>%
+    group_by(size_byte) %>%
+    summarize(med = median(fct_ns),
+              perc90 = quantile(fct_ns, .9),
+              perc99 = quantile(fct_ns, .99)) %>%
+    ungroup()
+
+fcts %>%
+    ggplot(aes(x = size_byte,
+               y = perc99)) +
+    geom_line(data = tibble(size = seq(from = log(min(dta$size_byte)), to = log(max(dta$size_byte)), length.out = 100) %>% exp()) %>%
+                  mutate(min_fct = max_fn(size)),
+              inherit.aes = FALSE,
+              aes(x = size, y = min_fct)) +
+    geom_point(color = "orange", shape = "cross", size = 5) +
+    geom_line(color = "orange") +
+    scale_y_log10(breaks = 10^(2:10),
+                  labels = c("100ns", "1us", "10us", "100us", "1ms", "10ms", "100ms", "1s", "10s")) +
+    scale_x_log10(breaks = 10^(2:10),
+                  labels = c("100 B", "1 KB", "10 KB", "100 KB", "1 MB", "10 MB", "100 MB", "1 GB", "10 GB")) +
+    labs(x = NULL, y = NULL,
+         caption = "github.com/nibrivia/rustasim",
+         title = "Flow completion time by flow size",
+         subtitle = "3:1 CLOS topology, k=12 switches, 25% load") +
+    theme_modern_rc()
