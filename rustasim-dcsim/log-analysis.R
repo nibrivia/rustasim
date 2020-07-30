@@ -100,7 +100,9 @@ fcts %>%
     geom_line(data = tibble(size = seq(from = log(min(dta$size_byte)), to = log(max(dta$size_byte)), length.out = 100) %>% exp()) %>%
                   mutate(min_fct = max_fn(size)),
               inherit.aes = FALSE,
-              aes(x = size, y = min_fct)) +
+              aes(x = size, y = min_fct),
+              color = "black",
+              linetype = "dashed") +
     geom_point(color = "orange", shape = "cross", size = 5) +
     geom_line(color = "orange") +
     scale_y_log10(breaks = 10^(2:10),
@@ -110,5 +112,5 @@ fcts %>%
     labs(x = NULL, y = NULL,
          caption = "github.com/nibrivia/rustasim",
          title = "Flow completion time by flow size",
-         subtitle = "3:1 CLOS topology, k=12 switches, 25% load") +
-    theme_modern_rc()
+         subtitle = paste0("3:1 CLOS topology, k=12 switches, 25% load (n=", prettyNum(nrow(dta), big.mark = ","), ")")) +
+    theme_ipsum_rc()
