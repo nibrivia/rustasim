@@ -300,7 +300,6 @@ impl Advancer<Time, u64> for Server {
                     let (packets, timeouts) = match net_event {
                         // TIMEOUT ==============================
                         NetworkEvent::Timeout => {
-                            self.count -= 1;
                             // TODO process ties in one go?
                             // See if we can process any timeouts
                             let mut res = (vec![], vec![]);
