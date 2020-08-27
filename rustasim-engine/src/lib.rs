@@ -21,6 +21,7 @@ use std::thread;
 mod engine;
 mod err;
 pub mod spsc;
+mod tree;
 mod worker;
 
 pub use self::engine::{Event, EventType, Merger};
